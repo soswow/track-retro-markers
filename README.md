@@ -57,12 +57,16 @@ Use `--debug-one-frame` to render only the first analysed frame as a PNG, with n
 - `--circle-radius <pixels>`: rendered marker radius. Default: `8`.
 - `--trail-line-width <pixels>`: rendered trail line width. Default: `3`.
 - `--trail-seconds <seconds>`: fade duration for trail modes. Default: `2`.
+- `--trail-markers <names>`: comma-separated marker names to draw trails for in `trails` and `overlay` modes, for example `"main front camera,center"`. Default: all markers.
 - `--threshold <value>`: `auto` or an integer from `0` to `255`. Default: `auto`.
 - `--min-area <pixels>` and `--max-area <pixels>`: connected-component area filter. Defaults: `2` and `2500`.
 - `--merge-distance <pixels>`: merge nearby clipped components before assigning marker centroids. Default: `35`.
 - `--max-track-distance <pixels>`: maximum frame-to-frame marker assignment distance. Default: `140`.
 - `--search-radius <pixels>`: automatic per-marker local search radius after the first frame. Default: `180`.
 - `--local-threshold-min <value>`: lowest threshold allowed when searching around an existing track. Default: `180`.
+- `--markers-layout <path>`: JSON layout with known marker names, coordinates, optional derived markers, and lines to draw. Extra detected blobs that do not fit the layout are ignored.
+- `--label-markers`: render marker names next to tracked markers. Most useful with `--markers-layout`.
+- `--layout-fit-tolerance <pixels>`: maximum distance from a transformed layout marker to a detected blob while fitting the layout. Default: `60`.
 - `--debug-one-frame`: render one PNG for the first analysed frame instead of writing CSV or video output.
 - `--no-progress`: disable the in-terminal progress bar (enabled by default on interactive terminals).
 

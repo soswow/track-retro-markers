@@ -70,6 +70,19 @@ const parseVideoMode = (value: string): VideoMode => {
   return value as VideoMode;
 };
 
+const parseMarkerNameList = (value: string): string[] => {
+  const markerNames = value
+    .split(",")
+    .map((markerName) => markerName.trim())
+    .filter((markerName) => markerName.length > 0);
+
+  if (markerNames.length === 0) {
+    throw new InvalidArgumentError("Expected at least one marker name.");
+  }
+
+  return markerNames;
+};
+
 const program = new Command();
 
 program
@@ -87,12 +100,16 @@ program
   .option("--circle-radius <pixels>", "rendered marker circle radius", parsePositiveInteger, 8)
   .option("--trail-line-width <pixels>", "rendered trail line width", parsePositiveInteger, 3)
   .option("--trail-seconds <seconds>", "trail fade duration for trails and overlay modes", parsePositiveNumber, 2)
+  .option("--trail-markers <names>", "comma-separated marker names to draw trails for", parseMarkerNameList)
   .option("--min-area <pixels>", "minimum connected component area", parsePositiveInteger, 2)
   .option("--max-area <pixels>", "maximum connected component area", parsePositiveInteger, 2500)
   .option("--merge-distance <pixels>", "merge nearby clipped components before assigning marker centroids", parsePositiveNumber, 35)
   .option("--max-track-distance <pixels>", "maximum per-frame marker assignment distance", parsePositiveNumber, 140)
   .option("--search-radius <pixels>", "automatic per-marker local search radius after the first frame", parsePositiveNumber, 180)
   .option("--local-threshold-min <value>", "lowest threshold allowed when searching around an existing track", parseThresholdInteger, 180)
+  .option("--markers-layout <path>", "JSON marker layout used to fit and label known markers")
+  .option("--label-markers", "render marker names next to tracked markers")
+  .option("--layout-fit-tolerance <pixels>", "maximum marker-layout fit error per marker", parsePositiveNumber, 60)
   .option("--debug-one-frame", "write one rendered PNG frame instead of CSV or video output")
   .option("--no-progress", "disable the in-terminal progress bar")
   .action(async (input: string, options: Record<string, unknown>) => {
@@ -111,6 +128,7 @@ program
       circleRadius: options.circleRadius as number,
       trailLineWidth: options.trailLineWidth as number,
       trailSeconds: options.trailSeconds as number,
+      trailMarkerNames: options.trailMarkers as string[] | undefined,
       trailColorStart,
       trailColorEnd,
       minArea: options.minArea as number,
@@ -119,6 +137,9 @@ program
       maxTrackDistance: options.maxTrackDistance as number,
       searchRadius: options.searchRadius as number,
       localThresholdMin: options.localThresholdMin as number,
+      markersLayoutPath: options.markersLayout === undefined ? undefined : String(options.markersLayout),
+      labelMarkers: options.labelMarkers === true,
+      layoutFitTolerance: options.layoutFitTolerance as number,
       debugOneFrame: options.debugOneFrame === true,
       showProgress: options.progress !== false
     });

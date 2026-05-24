@@ -1,5 +1,5 @@
 import { createWriteStream } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { once } from "node:events";
 import { spawn } from "node:child_process";
@@ -10,6 +10,47 @@ const require = createRequire(import.meta.url);
 const ffmpegPath = require("ffmpeg-static") as string | null;
 const ffprobeStatic = require("ffprobe-static") as { path: string };
 const MAX_COLOR_SPREAD = 45;
+const FONT_5X7: Record<string, string[]> = {
+  " ": ["00000", "00000", "00000", "00000", "00000", "00000", "00000"],
+  "-": ["00000", "00000", "00000", "11111", "00000", "00000", "00000"],
+  "?": ["01110", "10001", "00001", "00010", "00100", "00000", "00100"],
+  "0": ["01110", "10001", "10011", "10101", "11001", "10001", "01110"],
+  "1": ["00100", "01100", "00100", "00100", "00100", "00100", "01110"],
+  "2": ["01110", "10001", "00001", "00010", "00100", "01000", "11111"],
+  "3": ["11110", "00001", "00001", "01110", "00001", "00001", "11110"],
+  "4": ["00010", "00110", "01010", "10010", "11111", "00010", "00010"],
+  "5": ["11111", "10000", "10000", "11110", "00001", "00001", "11110"],
+  "6": ["01110", "10000", "10000", "11110", "10001", "10001", "01110"],
+  "7": ["11111", "00001", "00010", "00100", "01000", "01000", "01000"],
+  "8": ["01110", "10001", "10001", "01110", "10001", "10001", "01110"],
+  "9": ["01110", "10001", "10001", "01111", "00001", "00001", "01110"],
+  A: ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
+  B: ["11110", "10001", "10001", "11110", "10001", "10001", "11110"],
+  C: ["01110", "10001", "10000", "10000", "10000", "10001", "01110"],
+  D: ["11110", "10001", "10001", "10001", "10001", "10001", "11110"],
+  E: ["11111", "10000", "10000", "11110", "10000", "10000", "11111"],
+  F: ["11111", "10000", "10000", "11110", "10000", "10000", "10000"],
+  G: ["01110", "10001", "10000", "10111", "10001", "10001", "01111"],
+  H: ["10001", "10001", "10001", "11111", "10001", "10001", "10001"],
+  I: ["01110", "00100", "00100", "00100", "00100", "00100", "01110"],
+  J: ["00111", "00010", "00010", "00010", "00010", "10010", "01100"],
+  K: ["10001", "10010", "10100", "11000", "10100", "10010", "10001"],
+  L: ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
+  M: ["10001", "11011", "10101", "10101", "10001", "10001", "10001"],
+  N: ["10001", "11001", "10101", "10011", "10001", "10001", "10001"],
+  O: ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
+  P: ["11110", "10001", "10001", "11110", "10000", "10000", "10000"],
+  Q: ["01110", "10001", "10001", "10001", "10101", "10010", "01101"],
+  R: ["11110", "10001", "10001", "11110", "10100", "10010", "10001"],
+  S: ["01111", "10000", "10000", "01110", "00001", "00001", "11110"],
+  T: ["11111", "00100", "00100", "00100", "00100", "00100", "00100"],
+  U: ["10001", "10001", "10001", "10001", "10001", "10001", "01110"],
+  V: ["10001", "10001", "10001", "10001", "10001", "01010", "00100"],
+  W: ["10001", "10001", "10001", "10101", "10101", "10101", "01010"],
+  X: ["10001", "10001", "01010", "00100", "01010", "10001", "10001"],
+  Y: ["10001", "10001", "01010", "00100", "00100", "00100", "00100"],
+  Z: ["11111", "00001", "00010", "00100", "01000", "10000", "11111"]
+};
 
 export type VideoMode = "points" | "trails" | "overlay" | "pixels" | "copy" | "none";
 export type ThresholdOption = "auto" | number;
@@ -33,6 +74,10 @@ export type TrackOptions = {
   maxTrackDistance: number;
   searchRadius: number;
   localThresholdMin: number;
+  markersLayoutPath?: string;
+  labelMarkers?: boolean;
+  trailMarkerNames?: string[];
+  layoutFitTolerance: number;
   debugOneFrame?: boolean;
   showProgress?: boolean;
 };
@@ -60,6 +105,45 @@ type TrackPoint = {
   x: number;
   y: number;
   frameIndex: number;
+};
+
+type Point2d = {
+  x: number;
+  y: number;
+};
+
+type LayoutMarker = {
+  name: string;
+  point: Point2d;
+  isDerived: boolean;
+};
+
+type LayoutLine = {
+  name: string;
+  from: string;
+  to: string;
+};
+
+type MarkerLayout = {
+  markers: LayoutMarker[];
+  lines: LayoutLine[];
+};
+
+type LayoutFit = {
+  transform: SimilarityTransform;
+  markers: Array<{
+    name: string;
+    isDerived: boolean;
+    position: Detection;
+  }>;
+  rmsError: number;
+};
+
+type SimilarityTransform = {
+  a: number;
+  b: number;
+  translateX: number;
+  translateY: number;
 };
 
 type OutputPaths = {
@@ -158,6 +242,7 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
   assertFfmpegAvailable();
 
   const metadata = await probeVideo(options.inputPath);
+  const markerLayout = options.markersLayoutPath === undefined ? undefined : await readMarkerLayout(options.markersLayoutPath);
   const stopSeconds = options.stopSeconds ?? metadata.durationSeconds;
 
   if (stopSeconds !== undefined && stopSeconds <= options.startSeconds) {
@@ -192,6 +277,9 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
   let frameBufferOffset = 0;
   let resolvedThreshold = typeof options.threshold === "number" ? options.threshold : undefined;
   let searchTracks: Array<Detection | undefined> = [];
+  let trackLabels: string[] = [];
+  let trackDerivedFlags: boolean[] = [];
+  let currentLayoutFit: LayoutFit | undefined;
   let hasAcquiredTracks = false;
   let frameIndex = 0;
   const progressReporter = new ProgressReporter({
@@ -222,17 +310,40 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
       const frame = frameBuffer;
 
       if (resolvedThreshold === undefined) {
-        resolvedThreshold = detector.chooseAutoThreshold(frame);
+        resolvedThreshold =
+          markerLayout === undefined
+            ? detector.chooseAutoThreshold(frame)
+            : chooseLayoutAutoThreshold(detector, frame, markerLayout, options.layoutFitTolerance);
       }
 
       let detections: Detection[];
       let assignedTracks: Array<Detection | undefined>;
 
-      if (!hasAcquiredTracks) {
+      if (markerLayout !== undefined) {
+        detections = detector.detect(frame, resolvedThreshold);
+        currentLayoutFit = fitMarkerLayout(markerLayout, detections, options.layoutFitTolerance) ?? currentLayoutFit;
+
+        if (currentLayoutFit === undefined) {
+          throw new Error(
+            `Could not fit marker layout to detections within ${options.layoutFitTolerance}px. Try lowering --threshold or increasing --layout-fit-tolerance.`
+          );
+        }
+
+        assignedTracks = currentLayoutFit.markers.map((marker) => marker.position);
+        trackLabels = currentLayoutFit.markers.map((marker) => marker.name);
+        trackDerivedFlags = currentLayoutFit.markers.map((marker) => marker.isDerived);
+
+        if (!hasAcquiredTracks) {
+          histories = Array.from({ length: assignedTracks.length }, () => [] as TrackPoint[]);
+          hasAcquiredTracks = true;
+        }
+      } else if (!hasAcquiredTracks) {
         detections = detector.detect(frame, resolvedThreshold);
         assignedTracks = assignInitialDetections(detections);
         searchTracks = assignedTracks;
         histories = Array.from({ length: assignedTracks.length }, () => [] as TrackPoint[]);
+        trackLabels = assignedTracks.map((_, trackIndex) => `marker ${trackIndex + 1}`);
+        trackDerivedFlags = assignedTracks.map(() => false);
         hasAcquiredTracks = true;
       } else {
         assignedTracks = trackDetectionsLocally(frame, detector, searchTracks, resolvedThreshold, options, metadata);
@@ -247,7 +358,7 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
 
       if (csvStream !== undefined) {
         if (!csvHeaderWritten) {
-          csvStream.write(createCsvHeader(assignedTracks.length));
+          csvStream.write(createCsvHeader(trackLabels));
           csvHeaderWritten = true;
         }
 
@@ -255,7 +366,19 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
       }
 
       if (videoWriter !== undefined || shouldWriteDebugFrame) {
-        const renderedFrame = renderFrame(frame, assignedTracks, histories, frameIndex, metadata, resolvedThreshold, options);
+        const renderedFrame = renderFrame(
+          frame,
+          assignedTracks,
+          histories,
+          frameIndex,
+          metadata,
+          resolvedThreshold,
+          options,
+          trackLabels,
+          trackDerivedFlags,
+          markerLayout,
+          currentLayoutFit
+        );
 
         if (shouldWriteDebugFrame) {
           await writePngFrame(outputPaths.debugFramePath ?? "", metadata.width, metadata.height, renderedFrame);
@@ -292,7 +415,7 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
 
   if (csvStream !== undefined) {
     if (!csvHeaderWritten) {
-      csvStream.write(createCsvHeader(0));
+      csvStream.write(createCsvHeader([]));
     }
 
     csvStream.end();
@@ -311,6 +434,218 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
     threshold: resolvedThreshold ?? 255,
     framesProcessed: frameIndex,
     fps: metadata.fps
+  };
+};
+
+const readMarkerLayout = async (layoutPath: string): Promise<MarkerLayout> => {
+  const rawLayout = JSON.parse(await readFile(layoutPath, "utf8")) as {
+    markers?: Array<{
+      name?: unknown;
+      coordinates?: unknown;
+      isDerived?: unknown;
+    }>;
+    lines?: Array<{
+      name?: unknown;
+      from?: unknown;
+      to?: unknown;
+    }>;
+  };
+
+  const markers =
+    rawLayout.markers?.map((marker): LayoutMarker => {
+      if (
+        typeof marker.name !== "string" ||
+        !Array.isArray(marker.coordinates) ||
+        marker.coordinates.length !== 2 ||
+        typeof marker.coordinates[0] !== "number" ||
+        typeof marker.coordinates[1] !== "number"
+      ) {
+        throw new Error(`Invalid marker layout entry in ${layoutPath}`);
+      }
+
+      return {
+        name: marker.name,
+        point: {
+          x: marker.coordinates[0],
+          y: marker.coordinates[1]
+        },
+        isDerived: marker.isDerived === true
+      };
+    }) ?? [];
+
+  const lines =
+    rawLayout.lines?.map((line): LayoutLine => {
+      if (typeof line.name !== "string" || typeof line.from !== "string" || typeof line.to !== "string") {
+        throw new Error(`Invalid marker layout line in ${layoutPath}`);
+      }
+
+      return {
+        name: line.name,
+        from: line.from,
+        to: line.to
+      };
+    }) ?? [];
+
+  const realMarkerCount = markers.filter((marker) => !marker.isDerived).length;
+
+  if (realMarkerCount < 2) {
+    throw new Error(`Marker layout must contain at least two non-derived markers: ${layoutPath}`);
+  }
+
+  return { markers, lines };
+};
+
+const chooseLayoutAutoThreshold = (
+  detector: MarkerDetector,
+  frame: Buffer,
+  markerLayout: MarkerLayout,
+  layoutFitTolerance: number
+): number => {
+  const thresholdsToTry = [255, 252, 250, 248, 245, 242, 240, 235, 230, 225, 220];
+
+  for (const threshold of thresholdsToTry) {
+    const detections = detector.detect(frame, threshold);
+
+    if (fitMarkerLayout(markerLayout, detections, layoutFitTolerance) !== undefined) {
+      return threshold;
+    }
+  }
+
+  return detector.chooseAutoThreshold(frame);
+};
+
+const fitMarkerLayout = (markerLayout: MarkerLayout, detections: Detection[], tolerance: number): LayoutFit | undefined => {
+  const realMarkers = markerLayout.markers.filter((marker) => !marker.isDerived);
+
+  if (detections.length < realMarkers.length) {
+    return undefined;
+  }
+
+  let bestFit: LayoutFit | undefined;
+
+  for (let firstMarkerIndex = 0; firstMarkerIndex < realMarkers.length; firstMarkerIndex += 1) {
+    for (let secondMarkerIndex = 0; secondMarkerIndex < realMarkers.length; secondMarkerIndex += 1) {
+      if (firstMarkerIndex === secondMarkerIndex) {
+        continue;
+      }
+
+      const firstMarker = realMarkers[firstMarkerIndex];
+      const secondMarker = realMarkers[secondMarkerIndex];
+
+      if (firstMarker === undefined || secondMarker === undefined) {
+        continue;
+      }
+
+      for (let firstDetectionIndex = 0; firstDetectionIndex < detections.length; firstDetectionIndex += 1) {
+        for (let secondDetectionIndex = 0; secondDetectionIndex < detections.length; secondDetectionIndex += 1) {
+          if (firstDetectionIndex === secondDetectionIndex) {
+            continue;
+          }
+
+          const firstDetection = detections[firstDetectionIndex];
+          const secondDetection = detections[secondDetectionIndex];
+
+          if (firstDetection === undefined || secondDetection === undefined) {
+            continue;
+          }
+
+          const transform = createTransformFromPointPair(firstMarker.point, secondMarker.point, firstDetection, secondDetection);
+
+          if (transform === undefined) {
+            continue;
+          }
+
+          const fit = evaluateLayoutFit(markerLayout, realMarkers, detections, transform, tolerance);
+
+          if (fit === undefined) {
+            continue;
+          }
+
+          if (bestFit === undefined || fit.rmsError < bestFit.rmsError) {
+            bestFit = fit;
+          }
+        }
+      }
+    }
+  }
+
+  return bestFit;
+};
+
+const createTransformFromPointPair = (
+  firstModelPoint: Point2d,
+  secondModelPoint: Point2d,
+  firstImagePoint: Point2d,
+  secondImagePoint: Point2d
+): SimilarityTransform | undefined => {
+  const modelDeltaX = secondModelPoint.x - firstModelPoint.x;
+  const modelDeltaY = secondModelPoint.y - firstModelPoint.y;
+  const imageDeltaX = secondImagePoint.x - firstImagePoint.x;
+  const imageDeltaY = secondImagePoint.y - firstImagePoint.y;
+  const modelDistanceSquared = modelDeltaX ** 2 + modelDeltaY ** 2;
+
+  if (modelDistanceSquared === 0) {
+    return undefined;
+  }
+
+  const a = (imageDeltaX * modelDeltaX + imageDeltaY * modelDeltaY) / modelDistanceSquared;
+  const b = (imageDeltaY * modelDeltaX - imageDeltaX * modelDeltaY) / modelDistanceSquared;
+
+  return {
+    a,
+    b,
+    translateX: firstImagePoint.x - (a * firstModelPoint.x - b * firstModelPoint.y),
+    translateY: firstImagePoint.y - (b * firstModelPoint.x + a * firstModelPoint.y)
+  };
+};
+
+const evaluateLayoutFit = (
+  markerLayout: MarkerLayout,
+  realMarkers: LayoutMarker[],
+  detections: Detection[],
+  transform: SimilarityTransform,
+  tolerance: number
+): LayoutFit | undefined => {
+  const unusedDetections = new Set(detections);
+  const matchedRealMarkers = new Map<string, Detection>();
+  let squaredErrorTotal = 0;
+
+  for (const marker of realMarkers) {
+    const transformedPoint = transformPoint(marker.point, transform);
+    const matchedDetection = findClosestDetection(transformedPoint, [...unusedDetections], tolerance);
+
+    if (matchedDetection === undefined) {
+      return undefined;
+    }
+
+    squaredErrorTotal += squaredDistance(transformedPoint, matchedDetection);
+    matchedRealMarkers.set(marker.name, matchedDetection);
+    unusedDetections.delete(matchedDetection);
+  }
+
+  return {
+    transform,
+    markers: markerLayout.markers.map((marker) => {
+      const position = matchedRealMarkers.get(marker.name) ?? transformPoint(marker.point, transform);
+
+      return {
+        name: marker.name,
+        isDerived: marker.isDerived,
+        position: {
+          x: position.x,
+          y: position.y,
+          area: 0
+        }
+      };
+    }),
+    rmsError: Math.sqrt(squaredErrorTotal / realMarkers.length)
+  };
+};
+
+const transformPoint = (point: Point2d, transform: SimilarityTransform): Point2d => {
+  return {
+    x: transform.a * point.x - transform.b * point.y + transform.translateX,
+    y: transform.b * point.x + transform.a * point.y + transform.translateY
   };
 };
 
@@ -574,7 +909,7 @@ const createSearchWindow = (
 };
 
 const findClosestDetection = (
-  targetDetection: Detection,
+  targetDetection: Point2d,
   detections: Detection[],
   maxDistance: number
 ): Detection | undefined => {
@@ -644,7 +979,7 @@ const mergeNearbyDetections = (detections: Detection[], mergeDistance: number): 
   return groups;
 };
 
-const squaredDistance = (left: Detection, right: Detection): number => {
+const squaredDistance = (left: Point2d, right: Point2d): number => {
   return (left.x - right.x) ** 2 + (left.y - right.y) ** 2;
 };
 
@@ -666,7 +1001,11 @@ const renderFrame = (
   frameIndex: number,
   metadata: VideoMetadata,
   threshold: number,
-  options: TrackOptions
+  options: TrackOptions,
+  trackLabels: string[],
+  trackDerivedFlags: boolean[],
+  markerLayout?: MarkerLayout,
+  layoutFit?: LayoutFit
 ): Buffer => {
   if (options.videoMode === "pixels") {
     return renderPixelMask(sourceFrame, metadata.width, metadata.height, threshold, MAX_COLOR_SPREAD);
@@ -676,11 +1015,17 @@ const renderFrame = (
     return Buffer.from(sourceFrame);
   }
 
+  const trailMarkerNames = options.trailMarkerNames?.map(normalizeMarkerName);
   const outputFrame =
     options.videoMode === "overlay"
       ? Buffer.from(sourceFrame)
       : Buffer.alloc(metadata.width * metadata.height * 3, 0);
   const trailFrameCount = Math.max(1, Math.round(options.trailSeconds * metadata.fps));
+  const markerClusterCenter = getMarkerClusterCenter(assignedTracks);
+
+  if (markerLayout !== undefined && layoutFit !== undefined) {
+    drawLayoutLines(outputFrame, metadata.width, metadata.height, markerLayout, layoutFit);
+  }
 
   for (let trackIndex = 0; trackIndex < assignedTracks.length; trackIndex += 1) {
     const detection = assignedTracks[trackIndex];
@@ -698,7 +1043,11 @@ const renderFrame = (
       history.shift();
     }
 
-    if (options.videoMode === "trails" || options.videoMode === "overlay") {
+    const shouldDrawTrail =
+      (options.videoMode === "trails" || options.videoMode === "overlay") &&
+      (trailMarkerNames === undefined || trailMarkerNames.includes(normalizeMarkerName(trackLabels[trackIndex] ?? "")));
+
+    if (shouldDrawTrail) {
       drawTrail(
         outputFrame,
         metadata.width,
@@ -713,11 +1062,201 @@ const renderFrame = (
     }
 
     if (detection !== undefined) {
-      drawCircle(outputFrame, metadata.width, metadata.height, detection.x, detection.y, options.circleRadius, options.color, 1);
+      const markerColor = trackDerivedFlags[trackIndex] === true ? { red: 255, green: 255, blue: 0 } : options.color;
+      drawCircle(outputFrame, metadata.width, metadata.height, detection.x, detection.y, options.circleRadius, markerColor, 1);
+
+      if (options.labelMarkers === true) {
+        drawMarkerLabel(
+          outputFrame,
+          metadata.width,
+          metadata.height,
+          detection,
+          markerClusterCenter,
+          options.circleRadius,
+          trackLabels[trackIndex] ?? `marker ${trackIndex + 1}`,
+          { red: 255, green: 255, blue: 0 }
+        );
+      }
     }
   }
 
   return outputFrame;
+};
+
+const getMarkerClusterCenter = (assignedTracks: Array<Detection | undefined>): Point2d => {
+  const detections = assignedTracks.filter((detection) => detection !== undefined);
+
+  if (detections.length === 0) {
+    return { x: 0, y: 0 };
+  }
+
+  const totals = detections.reduce(
+    (accumulator, detection) => {
+      return {
+        x: accumulator.x + detection.x,
+        y: accumulator.y + detection.y
+      };
+    },
+    { x: 0, y: 0 }
+  );
+
+  return {
+    x: totals.x / detections.length,
+    y: totals.y / detections.length
+  };
+};
+
+const drawMarkerLabel = (
+  frame: Buffer,
+  width: number,
+  height: number,
+  detection: Detection,
+  clusterCenter: Point2d,
+  circleRadius: number,
+  label: string,
+  color: RgbColor
+): void => {
+  const textScale = 4;
+  const labelGapPixels = 85;
+  const labelLinePaddingPixels = 6;
+  const direction = normalizeVector({
+    x: detection.x - clusterCenter.x,
+    y: detection.y - clusterCenter.y
+  });
+  const textSize = measureText(label, textScale);
+  const circleEdge = {
+    x: detection.x + direction.x * circleRadius,
+    y: detection.y + direction.y * circleRadius
+  };
+  const labelPlacement = placeTextBox(circleEdge, direction, labelGapPixels, textSize.width, textSize.height);
+  const labelLine = padLine(circleEdge, labelPlacement.connectionPoint, labelLinePaddingPixels);
+  const alpha = 0.75;
+
+  drawLine(frame, width, height, labelLine.start.x, labelLine.start.y, labelLine.end.x, labelLine.end.y, 2, color, alpha);
+  drawText(frame, width, height, Math.round(labelPlacement.box.left), Math.round(labelPlacement.box.top), label, color, textScale, alpha);
+};
+
+const padLine = (start: Point2d, end: Point2d, padding: number): { start: Point2d; end: Point2d } => {
+  const deltaX = end.x - start.x;
+  const deltaY = end.y - start.y;
+  const length = Math.sqrt(deltaX ** 2 + deltaY ** 2);
+
+  if (length === 0) {
+    return { start, end };
+  }
+
+  const safePadding = Math.min(padding, length / 2);
+  const unitX = deltaX / length;
+  const unitY = deltaY / length;
+
+  return {
+    start: {
+      x: start.x + unitX * safePadding,
+      y: start.y + unitY * safePadding
+    },
+    end: {
+      x: end.x - unitX * safePadding,
+      y: end.y - unitY * safePadding
+    }
+  };
+};
+
+const normalizeVector = (vector: Point2d): Point2d => {
+  const length = Math.sqrt(vector.x ** 2 + vector.y ** 2);
+
+  if (length === 0) {
+    return { x: 1, y: 0 };
+  }
+
+  return {
+    x: vector.x / length,
+    y: vector.y / length
+  };
+};
+
+const measureText = (text: string, scale: number): { width: number; height: number } => {
+  const characterCount = text.length;
+
+  if (characterCount === 0) {
+    return { width: 0, height: 7 * scale };
+  }
+
+  return {
+    width: (characterCount * 5 + (characterCount - 1)) * scale,
+    height: 7 * scale
+  };
+};
+
+const placeTextBox = (
+  circleEdge: Point2d,
+  direction: Point2d,
+  labelGapPixels: number,
+  textWidth: number,
+  textHeight: number
+): {
+  box: { left: number; top: number; right: number; bottom: number };
+  connectionPoint: Point2d;
+} => {
+  const halfWidth = textWidth / 2;
+  const halfHeight = textHeight / 2;
+  const connectionPoint = {
+    x: circleEdge.x + direction.x * labelGapPixels,
+    y: circleEdge.y + direction.y * labelGapPixels
+  };
+  const inwardBoundaryPoint = getInwardTextBoundaryPoint(direction, halfWidth, halfHeight);
+  const textCenter = {
+    x: connectionPoint.x - inwardBoundaryPoint.x,
+    y: connectionPoint.y - inwardBoundaryPoint.y
+  };
+  const left = textCenter.x - halfWidth;
+  const top = textCenter.y - halfHeight;
+
+  return {
+    box: {
+      left,
+      top,
+      right: left + textWidth,
+      bottom: top + textHeight
+    },
+    connectionPoint
+  };
+};
+
+const getInwardTextBoundaryPoint = (direction: Point2d, halfWidth: number, halfHeight: number): Point2d => {
+  const maxComponent = Math.max(Math.abs(direction.x), Math.abs(direction.y));
+
+  if (maxComponent === 0) {
+    return {
+      x: -halfWidth,
+      y: 0
+    };
+  }
+
+  return {
+    x: (-direction.x / maxComponent) * halfWidth,
+    y: (-direction.y / maxComponent) * halfHeight
+  };
+};
+
+const drawLayoutLines = (
+  frame: Buffer,
+  width: number,
+  height: number,
+  markerLayout: MarkerLayout,
+  layoutFit: LayoutFit
+): void => {
+  const markersByName = new Map(layoutFit.markers.map((marker) => [marker.name, marker.position]));
+
+  for (const line of markerLayout.lines) {
+    const fromMarker = markersByName.get(line.from);
+    const toMarker = markersByName.get(line.to);
+
+    if (fromMarker === undefined || toMarker === undefined) {
+      continue;
+    }
+
+    drawLine(frame, width, height, fromMarker.x, fromMarker.y, toMarker.x, toMarker.y, 2, { red: 0, green: 255, blue: 255 }, 0.65);
+  }
 };
 
 const renderPixelMask = (sourceFrame: Buffer, width: number, height: number, threshold: number, maxColorSpread: number): Buffer => {
@@ -736,6 +1275,10 @@ const renderPixelMask = (sourceFrame: Buffer, width: number, height: number, thr
   }
 
   return outputFrame;
+};
+
+const normalizeMarkerName = (markerName: string): string => {
+  return markerName.trim().toLowerCase();
 };
 
 const drawTrail = (
@@ -856,6 +1399,60 @@ const drawLinePoint = (
   drawCircle(frame, width, height, x, y, Math.floor(lineWidth / 2), color, alpha);
 };
 
+const drawText = (
+  frame: Buffer,
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+  text: string,
+  color: RgbColor,
+  scale: number,
+  alpha: number
+): void => {
+  let cursorX = x;
+
+  for (const character of text.toUpperCase()) {
+    const glyph = FONT_5X7[character] ?? FONT_5X7["?"];
+
+    if (glyph === undefined) {
+      cursorX += 6 * scale;
+      continue;
+    }
+
+    for (let rowIndex = 0; rowIndex < glyph.length; rowIndex += 1) {
+      const row = glyph[rowIndex] ?? "";
+
+      for (let columnIndex = 0; columnIndex < row.length; columnIndex += 1) {
+        if (row[columnIndex] !== "1") {
+          continue;
+        }
+
+        drawTextPixel(frame, width, height, cursorX + columnIndex * scale, y + rowIndex * scale, scale, color, alpha);
+      }
+    }
+
+    cursorX += 6 * scale;
+  }
+};
+
+const drawTextPixel = (
+  frame: Buffer,
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+  scale: number,
+  color: RgbColor,
+  alpha: number
+): void => {
+  for (let offsetY = 0; offsetY < scale; offsetY += 1) {
+    for (let offsetX = 0; offsetX < scale; offsetX += 1) {
+      blendPixel(frame, width, height, x + offsetX, y + offsetY, color, alpha);
+    }
+  }
+};
+
 const blendPixel = (frame: Buffer, width: number, height: number, x: number, y: number, color: RgbColor, alpha: number): void => {
   if (x < 0 || y < 0 || x >= width || y >= height || alpha <= 0) {
     return;
@@ -871,13 +1468,21 @@ const blendChannel = (background: number, foreground: number, alpha: number): nu
   return Math.round(background * (1 - alpha) + foreground * alpha);
 };
 
-const createCsvHeader = (markerCount: number): string => {
-  const markerColumns = Array.from({ length: markerCount }, (_, markerIndex) => {
-    const markerNumber = markerIndex + 1;
-    return `marker_${markerNumber}_x,marker_${markerNumber}_y`;
+const createCsvHeader = (markerLabels: string[]): string => {
+  const markerColumns = markerLabels.flatMap((markerLabel, markerIndex) => {
+    const markerName = sanitizeCsvColumnName(markerLabel || `marker ${markerIndex + 1}`);
+    return [`${markerName}_x`, `${markerName}_y`];
   });
 
   return ["timestamp_seconds", "frame_index", ...markerColumns].join(",") + "\n";
+};
+
+const sanitizeCsvColumnName = (value: string): string => {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, "_")
+    .replace(/^_+|_+$/gu, "");
 };
 
 const writeCsvRow = (
