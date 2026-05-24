@@ -1,0 +1,83 @@
+{
+    "markers": [
+        {
+            "name": "right front motor",
+            "coordinates": [11.380305, 0.59068686]
+        },
+        {
+            "name": "left front motor",
+            "coordinates": [0.76264024, 205.31561]
+        },
+        {
+            "name": "right front camera",
+            "coordinates": [12.5172, 76.938782]
+        },
+        {
+            "name": "main front camera",
+            "coordinates": [-5.313611, 102.45837]
+        },
+        {
+            "name": "left front camera",
+            "coordinates": [9.7816916, 129.68555]
+        },
+        {
+            "name": "rear right motor",
+            "coordinates": [150.16135, 37.50238]
+        },
+        {
+            "name": "rear left motor",
+            "coordinates": [142.60263, 183.25165]
+        },
+        {
+            "name": "rear body",
+            "coordinates": [125.77695, 109.25689]
+        },
+        {
+            "name": "center",
+            "coordinates": [88.024033, 107.29897],
+            "isDerived": true
+        }
+    ],
+    "lines": [
+        {
+            "name": "right motors line",
+            "from": "right front motor",
+            "to": "rear right motor"
+        },
+        {
+            "name": "left motors line",
+            "from": "left front motor",
+            "to": "rear left motor"
+        },
+        {
+            "name": "front motors line",
+            "from": "right front motor",
+            "to": "left front motor"
+        },
+        {
+            "name": "main axis",
+            "from": "main front camera",
+            "to": "rear body"
+        },
+        {
+            "name": "left front to rear right motors line",
+            "from": "left front motor",
+            "to": "rear right motor"
+        },
+        {
+            "name": "right front to rear left motors line",
+            "from": "right front motor",
+            "to": "rear left motor"
+        },
+        {
+            "name": "rear motors line",
+            "from": "rear right motor",
+            "to": "rear left motor"
+        },
+        {
+            "name": "right front to left front cameras line",
+            "from": "right front camera",
+            "to": "left front camera"
+        }
+    ]
+}
