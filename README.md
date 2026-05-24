@@ -28,6 +28,15 @@ npm run track -- inputs/VID_20260523_215552.mp4 \
   --output outputs
 ```
 
+```sh
+node --import tsx src/cli.ts '/Users/sasha/hobby/track-retro-markers/inputs/VID_20260524_185234.mp4' \
+  --trail-line-width 4 --circle-radius 12 --trail-seconds 20 --min-area 10 --merge-distance 10  \
+  --color-start green --color-end blue --start 02:20 --stop 02:34  \
+  --video trails --output outputs --threshold 180 \
+  --markers-layout markers-layout.json --label-markers \
+  --trail-markers="main front camera, center, rear body"
+```
+
 Outputs are derived from the input base name and requested time range. For the example above:
 
 - `outputs/VID_20260523_215552_0p000-10p000_markers.csv`
@@ -67,6 +76,7 @@ Use `--debug-one-frame` to render only the first analysed frame as a PNG, with n
 - `--markers-layout <path>`: JSON layout with known marker names, coordinates, optional derived markers, and lines to draw. Extra detected blobs that do not fit the layout are ignored.
 - `--label-markers`: render marker names next to tracked markers. Most useful with `--markers-layout`.
 - `--layout-fit-tolerance <pixels>`: maximum distance from a transformed layout marker to a detected blob while fitting the layout. Default: `60`.
+- With `--markers-layout`, processing stops after 5 consecutive frames where the full layout cannot be fit. The final failed frame is written as a `pixels` debug PNG ending in `_pixels_debug.png`.
 - `--debug-one-frame`: render one PNG for the first analysed frame instead of writing CSV or video output.
 - `--no-progress`: disable the in-terminal progress bar (enabled by default on interactive terminals).
 

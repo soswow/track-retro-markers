@@ -10,6 +10,7 @@ const require = createRequire(import.meta.url);
 const ffmpegPath = require("ffmpeg-static") as string | null;
 const ffprobeStatic = require("ffprobe-static") as { path: string };
 const MAX_COLOR_SPREAD = 45;
+const MAX_CONSECUTIVE_LAYOUT_MISSES = 5;
 const FONT_5X7: Record<string, string[]> = {
   " ": ["00000", "00000", "00000", "00000", "00000", "00000", "00000"],
   "-": ["00000", "00000", "00000", "11111", "00000", "00000", "00000"],
@@ -150,6 +151,7 @@ type OutputPaths = {
   csvPath?: string;
   videoPath?: string;
   debugFramePath?: string;
+  layoutMissDebugFramePath?: string;
 };
 
 type SearchWindow = {
@@ -280,6 +282,8 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
   let trackLabels: string[] = [];
   let trackDerivedFlags: boolean[] = [];
   let currentLayoutFit: LayoutFit | undefined;
+  let consecutiveLayoutMisses = 0;
+  let generatedDebugFramePath = outputPaths.debugFramePath;
   let hasAcquiredTracks = false;
   let frameIndex = 0;
   const progressReporter = new ProgressReporter({
@@ -321,21 +325,36 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
 
       if (markerLayout !== undefined) {
         detections = detector.detect(frame, resolvedThreshold);
-        currentLayoutFit = fitMarkerLayout(markerLayout, detections, options.layoutFitTolerance) ?? currentLayoutFit;
+        const layoutFit = fitMarkerLayout(markerLayout, detections, options.layoutFitTolerance);
 
-        if (currentLayoutFit === undefined) {
-          throw new Error(
-            `Could not fit marker layout to detections within ${options.layoutFitTolerance}px. Try lowering --threshold or increasing --layout-fit-tolerance.`
-          );
+        if (layoutFit === undefined) {
+          consecutiveLayoutMisses += 1;
+
+          if (consecutiveLayoutMisses >= MAX_CONSECUTIVE_LAYOUT_MISSES) {
+            const debugFramePath = outputPaths.layoutMissDebugFramePath ?? "";
+            const pixelDebugFrame = renderPixelMask(frame, metadata.width, metadata.height, resolvedThreshold, MAX_COLOR_SPREAD);
+            await writePngFrame(debugFramePath, metadata.width, metadata.height, pixelDebugFrame);
+            generatedDebugFramePath = debugFramePath;
+            frameProcessingComplete = true;
+          }
+        } else {
+          currentLayoutFit = layoutFit;
+          consecutiveLayoutMisses = 0;
         }
 
-        assignedTracks = currentLayoutFit.markers.map((marker) => marker.position);
-        trackLabels = currentLayoutFit.markers.map((marker) => marker.name);
-        trackDerivedFlags = currentLayoutFit.markers.map((marker) => marker.isDerived);
+        if (currentLayoutFit === undefined) {
+          assignedTracks = [];
+          trackLabels = [];
+          trackDerivedFlags = [];
+        } else {
+          assignedTracks = currentLayoutFit.markers.map((marker) => marker.position);
+          trackLabels = currentLayoutFit.markers.map((marker) => marker.name);
+          trackDerivedFlags = currentLayoutFit.markers.map((marker) => marker.isDerived);
+        }
 
         if (!hasAcquiredTracks) {
           histories = Array.from({ length: assignedTracks.length }, () => [] as TrackPoint[]);
-          hasAcquiredTracks = true;
+          hasAcquiredTracks = assignedTracks.length > 0;
         }
       } else if (!hasAcquiredTracks) {
         detections = detector.detect(frame, resolvedThreshold);
@@ -409,7 +428,7 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
 
   const readerExitCode = await stopChildProcess(ffmpeg, "frame extraction");
 
-  if (readerExitCode !== 0) {
+  if (readerExitCode !== 0 && !frameProcessingComplete) {
     throw new Error(`FFmpeg frame extraction failed with exit code ${readerExitCode}`);
   }
 
@@ -430,7 +449,7 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
   return {
     csvPath: outputPaths.csvPath,
     videoPath: outputPaths.videoPath,
-    debugFramePath: outputPaths.debugFramePath,
+    debugFramePath: generatedDebugFramePath,
     threshold: resolvedThreshold ?? 255,
     framesProcessed: frameIndex,
     fps: metadata.fps
@@ -1518,7 +1537,8 @@ const createOutputPaths = async (options: TrackOptions, stopSeconds?: number): P
     csvPath: options.debugOneFrame === true ? undefined : `${outputPrefix}_markers.csv`,
     videoPath: options.debugOneFrame === true || options.videoMode === "none" ? undefined : `${outputPrefix}_${options.videoMode}.mp4`,
     debugFramePath:
-      options.debugOneFrame === true && options.videoMode !== "none" ? `${outputPrefix}_${options.videoMode}_debug.png` : undefined
+      options.debugOneFrame === true && options.videoMode !== "none" ? `${outputPrefix}_${options.videoMode}_debug.png` : undefined,
+    layoutMissDebugFramePath: `${outputPrefix}_pixels_debug.png`
   };
 };
 

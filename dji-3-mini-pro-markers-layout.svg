@@ -24,9 +24,9 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
      showguides="true"
-     inkscape:zoom="1.5783935"
-     inkscape:cx="210.974"
-     inkscape:cy="400.09034"
+     inkscape:zoom="1.0543139"
+     inkscape:cx="293.08159"
+     inkscape:cy="410.21938"
      inkscape:window-width="1676"
      inkscape:window-height="1056"
      inkscape:window-x="52"
@@ -100,8 +100,8 @@
      inkscape:label="rear body" /><ellipse
      style="font-variation-settings:normal;display:inline;vector-effect:none;fill:#fc0000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:0.0499999;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;-inkscape-stroke:none;stop-color:#000000"
      id="center"
-     cx="88.024033"
-     cy="107.29897"
+     cx="64.139404"
+     cy="106.06358"
      rx="2.4873307"
      ry="2.5231216"
      transform="rotate(-2.9687662)"
@@ -141,5 +141,5 @@
      inkscape:label="rear motors line" /><path
      style="font-variation-settings:normal;opacity:1;vector-effect:none;fill:none;fill-opacity:1;stroke:#00ffff;stroke-width:0.1;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;-inkscape-stroke:none;stop-color:#000000;stop-opacity:1"
      d="M 16.485181,129.00489 V 76.187238"
-     id="right front to left front cameras line"
+     id="path2"
      inkscape:label="right front to left front cameras line" /></svg>

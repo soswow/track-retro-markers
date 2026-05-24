@@ -34,7 +34,7 @@
         },
         {
             "name": "center",
-            "coordinates": [88.024033, 107.29897],
+            "coordinates": [64.139404, 106.06358],
             "isDerived": true
         }
     ],
@@ -60,24 +60,9 @@
             "to": "rear body"
         },
         {
-            "name": "left front to rear right motors line",
-            "from": "left front motor",
-            "to": "rear right motor"
-        },
-        {
-            "name": "right front to rear left motors line",
-            "from": "right front motor",
-            "to": "rear left motor"
-        },
-        {
             "name": "rear motors line",
             "from": "rear right motor",
             "to": "rear left motor"
-        },
-        {
-            "name": "right front to left front cameras line",
-            "from": "right front camera",
-            "to": "left front camera"
         }
     ]
 }
