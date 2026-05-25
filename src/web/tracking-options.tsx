@@ -8,7 +8,9 @@ import {
   ErrorText,
   Field,
   FieldInput,
+  FieldLabelText,
   FieldSelect,
+  InfoTooltip,
   OptionsGrid,
   Panel,
   SecondaryButton,
@@ -22,6 +24,51 @@ import {
 import { parseRoiValue } from "./form-helpers.js";
 
 type SettingsTab = "source" | "processing" | "display";
+
+const fieldDescriptions = {
+  startSeconds: "Start processing from this time. Accepts seconds or hh:mm:ss.sss.",
+  stopSeconds: "Stop processing at this time. Leave empty to process to the end of the video.",
+  roi: "Limit detection to a rectangular region of interest: left,top,right,bottom.",
+  markersLayoutPath: "Use a marker layout file to assign detected points to named markers.",
+  threshold: "Brightness threshold for marker pixels. Lower values include more pixels; higher values are stricter.",
+  thresholdPreviewEnabled: "Show a one-frame preview of pixels selected by the current threshold and processing settings.",
+  minArea: "Smallest connected bright region, in pixels, that can be treated as a marker.",
+  maxArea: "Largest connected bright region, in pixels, that can be treated as a marker.",
+  mergeDistance: "Merge nearby bright regions before calculating marker centers.",
+  maxTrackDistance: "Maximum frame-to-frame distance allowed when matching a marker to its previous position.",
+  searchRadius: "Local search radius around an existing track after the first frame.",
+  localThresholdMin: "Lowest automatic threshold allowed while searching around an existing track.",
+  layoutFitTolerance: "Maximum distance allowed when fitting detections to the selected marker layout.",
+  videoMode: "Choose the generated video style: overlay, trails, points, pixels, copy, or none.",
+  color: "Marker color used for point and overlay rendering.",
+  colorStart: "Starting trail color. Leave empty to use the marker color.",
+  colorEnd: "Ending trail color. Leave empty to use the marker color.",
+  circleRadius: "Radius, in pixels, for rendered marker circles.",
+  trailLineWidth: "Width, in pixels, for rendered trail lines.",
+  trailSeconds: "How many seconds of marker movement remain visible in trail modes.",
+  trailMarkers: "Select named markers to draw trails for. Leave empty to draw trails for all markers.",
+  labelMarkers: "Draw marker names next to tracked markers in the output video.",
+  cropToRoi: "Crop the rendered output video to the region of interest.",
+  debugOneFrame: "Process a single frame and write a debug image instead of a full output video."
+} satisfies Record<string, string>;
+
+type LabelWithInfoProps = {
+  children: React.ReactNode;
+  description: string;
+};
+
+const LabelWithInfo = ({ children, description }: LabelWithInfoProps): JSX.Element => (
+  <FieldLabelText>
+    {children}
+    <InfoTooltip
+      aria-label={`Info: ${description}`}
+      data-description={description}
+      tabIndex={0}
+    >
+      i
+    </InfoTooltip>
+  </FieldLabelText>
+);
 
 type TrackingOptionsProps = {
   activeSettingsTab: SettingsTab;
@@ -125,7 +172,7 @@ export const TrackingOptions = ({
 
             <OptionsGrid style={{ marginTop: "16px" }}>
               <Field>
-                Start time
+                <LabelWithInfo description={fieldDescriptions.startSeconds}>Start time</LabelWithInfo>
                 <FieldInput
                   value={formState.startSeconds}
                   onChange={(event) => {
@@ -134,7 +181,7 @@ export const TrackingOptions = ({
                 />
               </Field>
               <Field>
-                Stop time
+                <LabelWithInfo description={fieldDescriptions.stopSeconds}>Stop time</LabelWithInfo>
                 <FieldInput
                   value={formState.stopSeconds}
                   placeholder="end of video"
@@ -155,7 +202,7 @@ export const TrackingOptions = ({
             </TimeControls>
             <OptionsGrid style={{ marginTop: "16px" }}>
               <Field>
-                ROI
+                <LabelWithInfo description={fieldDescriptions.roi}>ROI</LabelWithInfo>
                 <FieldInput
                   value={formState.roi}
                   placeholder="left,top,right,bottom"
@@ -167,7 +214,7 @@ export const TrackingOptions = ({
             </OptionsGrid>
             <OptionsGrid style={{ marginTop: "16px" }}>
               <Field>
-                Marker layout
+                <LabelWithInfo description={fieldDescriptions.markersLayoutPath}>Marker layout</LabelWithInfo>
                 <FieldSelect
                   value={formState.markersLayoutPath}
                   onChange={(event) => {
@@ -190,7 +237,7 @@ export const TrackingOptions = ({
         {activeSettingsTab === "processing" && (
           <OptionsGrid>
             <Field>
-              Threshold: {formState.threshold}
+              <LabelWithInfo description={fieldDescriptions.threshold}>Threshold: {formState.threshold}</LabelWithInfo>
               <SliderRow>
                 <input
                   max="255"
@@ -220,11 +267,11 @@ export const TrackingOptions = ({
                     onUpdateFormValue("thresholdPreviewEnabled", event.target.checked);
                   }}
                 />
-                Preview threshold pixels
+                <LabelWithInfo description={fieldDescriptions.thresholdPreviewEnabled}>Preview threshold pixels</LabelWithInfo>
               </CheckboxField>
             </Field>
             <Field>
-              Min area
+              <LabelWithInfo description={fieldDescriptions.minArea}>Min area</LabelWithInfo>
               <FieldInput
                 value={formState.minArea}
                 onChange={(event) => {
@@ -233,7 +280,7 @@ export const TrackingOptions = ({
               />
             </Field>
             <Field>
-              Max area
+              <LabelWithInfo description={fieldDescriptions.maxArea}>Max area</LabelWithInfo>
               <FieldInput
                 value={formState.maxArea}
                 onChange={(event) => {
@@ -242,7 +289,7 @@ export const TrackingOptions = ({
               />
             </Field>
             <Field>
-              Merge distance
+              <LabelWithInfo description={fieldDescriptions.mergeDistance}>Merge distance</LabelWithInfo>
               <FieldInput
                 value={formState.mergeDistance}
                 onChange={(event) => {
@@ -251,7 +298,7 @@ export const TrackingOptions = ({
               />
             </Field>
             <Field>
-              Max track distance
+              <LabelWithInfo description={fieldDescriptions.maxTrackDistance}>Max track distance</LabelWithInfo>
               <FieldInput
                 value={formState.maxTrackDistance}
                 onChange={(event) => {
@@ -260,7 +307,7 @@ export const TrackingOptions = ({
               />
             </Field>
             <Field>
-              Search radius
+              <LabelWithInfo description={fieldDescriptions.searchRadius}>Search radius</LabelWithInfo>
               <FieldInput
                 value={formState.searchRadius}
                 onChange={(event) => {
@@ -269,7 +316,7 @@ export const TrackingOptions = ({
               />
             </Field>
             <Field>
-              Local threshold min
+              <LabelWithInfo description={fieldDescriptions.localThresholdMin}>Local threshold min</LabelWithInfo>
               <FieldInput
                 value={formState.localThresholdMin}
                 onChange={(event) => {
@@ -278,7 +325,7 @@ export const TrackingOptions = ({
               />
             </Field>
             <Field>
-              Layout fit tolerance
+              <LabelWithInfo description={fieldDescriptions.layoutFitTolerance}>Layout fit tolerance</LabelWithInfo>
               <FieldInput
                 value={formState.layoutFitTolerance}
                 onChange={(event) => {
@@ -293,7 +340,7 @@ export const TrackingOptions = ({
           <>
             <OptionsGrid>
               <Field>
-                Video mode
+                <LabelWithInfo description={fieldDescriptions.videoMode}>Video mode</LabelWithInfo>
                 <FieldSelect
                   value={formState.videoMode}
                   onChange={(event) => {
@@ -308,7 +355,7 @@ export const TrackingOptions = ({
                 </FieldSelect>
               </Field>
               <Field>
-                Color
+                <LabelWithInfo description={fieldDescriptions.color}>Color</LabelWithInfo>
                 <FieldInput
                   value={formState.color}
                   onChange={(event) => {
@@ -317,7 +364,7 @@ export const TrackingOptions = ({
                 />
               </Field>
               <Field>
-                Color start
+                <LabelWithInfo description={fieldDescriptions.colorStart}>Color start</LabelWithInfo>
                 <FieldInput
                   value={formState.colorStart}
                   placeholder="defaults to color"
@@ -327,7 +374,7 @@ export const TrackingOptions = ({
                 />
               </Field>
               <Field>
-                Color end
+                <LabelWithInfo description={fieldDescriptions.colorEnd}>Color end</LabelWithInfo>
                 <FieldInput
                   value={formState.colorEnd}
                   placeholder="defaults to color"
@@ -337,7 +384,7 @@ export const TrackingOptions = ({
                 />
               </Field>
               <Field>
-                Circle radius
+                <LabelWithInfo description={fieldDescriptions.circleRadius}>Circle radius</LabelWithInfo>
                 <FieldInput
                   value={formState.circleRadius}
                   onChange={(event) => {
@@ -346,7 +393,7 @@ export const TrackingOptions = ({
                 />
               </Field>
               <Field>
-                Trail line width
+                <LabelWithInfo description={fieldDescriptions.trailLineWidth}>Trail line width</LabelWithInfo>
                 <FieldInput
                   value={formState.trailLineWidth}
                   onChange={(event) => {
@@ -355,7 +402,7 @@ export const TrackingOptions = ({
                 />
               </Field>
               <Field>
-                Trail seconds
+                <LabelWithInfo description={fieldDescriptions.trailSeconds}>Trail seconds</LabelWithInfo>
                 <FieldInput
                   value={formState.trailSeconds}
                   onChange={(event) => {
@@ -364,7 +411,7 @@ export const TrackingOptions = ({
                 />
               </Field>
               <Field>
-                Trail markers
+                <LabelWithInfo description={fieldDescriptions.trailMarkers}>Trail markers</LabelWithInfo>
                 <FieldSelect
                   disabled={isTrailMarkersDisabled}
                   multiple
@@ -392,7 +439,7 @@ export const TrackingOptions = ({
                     onUpdateFormValue("labelMarkers", event.target.checked);
                   }}
                 />
-                Label markers
+                <LabelWithInfo description={fieldDescriptions.labelMarkers}>Label markers</LabelWithInfo>
               </CheckboxField>
               <CheckboxField>
                 <input
@@ -403,7 +450,7 @@ export const TrackingOptions = ({
                     onUpdateFormValue("cropToRoi", event.target.checked);
                   }}
                 />
-                Crop to ROI
+                <LabelWithInfo description={fieldDescriptions.cropToRoi}>Crop to ROI</LabelWithInfo>
               </CheckboxField>
               <CheckboxField>
                 <input
@@ -413,7 +460,7 @@ export const TrackingOptions = ({
                     onUpdateFormValue("debugOneFrame", event.target.checked);
                   }}
                 />
-                Debug one frame
+                <LabelWithInfo description={fieldDescriptions.debugOneFrame}>Debug one frame</LabelWithInfo>
               </CheckboxField>
             </CheckboxList>
           </>

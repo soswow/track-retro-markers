@@ -244,6 +244,67 @@ export const Field = styled.label`
   color: #c5d0db;
 `;
 
+export const FieldLabelText = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+`;
+
+export const InfoTooltip = styled.span`
+  position: relative;
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border: 1px solid #5f7082;
+  border-radius: 999px;
+  color: #c5d0db;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+
+  &::after {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    z-index: 20;
+    width: max-content;
+    max-width: 260px;
+    padding: 8px 10px;
+    border: 1px solid #27303d;
+    border-radius: 8px;
+    background: #11161d;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 32%);
+    color: #f3f7fb;
+    content: attr(data-description);
+    font-size: calc(0.78rem + 2px);
+    font-weight: 400;
+    line-height: 1.35;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, 4px);
+    transition:
+      opacity 120ms ease,
+      transform 120ms ease;
+    white-space: normal;
+  }
+
+  &:hover,
+  &:focus {
+    border-color: #4f8cff;
+    color: #f3f7fb;
+    outline: none;
+  }
+
+  &:hover::after,
+  &:focus::after {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+`;
+
 export const FieldInput = styled.input`
   border: 1px solid #27303d;
   border-radius: 8px;
