@@ -4,6 +4,7 @@ import type { VideoMode } from "../track-options.js";
 import {
   ActionButton,
   CheckboxField,
+  CheckboxList,
   ErrorText,
   Field,
   FieldInput,
@@ -18,6 +19,7 @@ import {
   TimeControls,
   Title
 } from "./ui-components.js";
+import { parseRoiValue } from "./form-helpers.js";
 
 type SettingsTab = "source" | "processing" | "display";
 
@@ -64,6 +66,7 @@ export const TrackingOptions = ({
     .map((markerName) => markerName.trim())
     .filter((markerName) => markerName.length > 0);
   const isTrailMarkersDisabled = selectedLayout === undefined || selectedLayout.markerNames.length === 0;
+  const hasValidRoi = parseRoiValue(formState.roi) !== undefined;
 
   return (
     <Panel>
@@ -380,7 +383,7 @@ export const TrackingOptions = ({
                 </FieldSelect>
               </Field>
             </OptionsGrid>
-            <OptionsGrid style={{ marginTop: "12px" }}>
+            <CheckboxList style={{ marginTop: "12px" }}>
               <CheckboxField>
                 <input
                   checked={formState.labelMarkers}
@@ -393,6 +396,17 @@ export const TrackingOptions = ({
               </CheckboxField>
               <CheckboxField>
                 <input
+                  checked={hasValidRoi && formState.cropToRoi}
+                  disabled={!hasValidRoi}
+                  type="checkbox"
+                  onChange={(event) => {
+                    onUpdateFormValue("cropToRoi", event.target.checked);
+                  }}
+                />
+                Crop to ROI
+              </CheckboxField>
+              <CheckboxField>
+                <input
                   checked={formState.debugOneFrame}
                   type="checkbox"
                   onChange={(event) => {
@@ -401,7 +415,7 @@ export const TrackingOptions = ({
                 />
                 Debug one frame
               </CheckboxField>
-            </OptionsGrid>
+            </CheckboxList>
           </>
         )}
       </TabBody>

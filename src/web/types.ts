@@ -71,6 +71,7 @@ export type TrackSettingsDefaults = {
   localThresholdMin: number;
   layoutFitTolerance: number;
   labelMarkers: boolean;
+  cropToRoi: boolean;
   debugOneFrame: boolean;
   showProgress: boolean;
 };
@@ -103,6 +104,7 @@ export type JobFormState = {
   roi: string;
   markersLayoutPath: string;
   labelMarkers: boolean;
+  cropToRoi: boolean;
   layoutFitTolerance: string;
   debugOneFrame: boolean;
 };

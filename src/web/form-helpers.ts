@@ -90,6 +90,7 @@ export const createDefaultFormState = (settings: SettingsResponse): JobFormState
     roi: "",
     markersLayoutPath: "",
     labelMarkers: settings.defaults.labelMarkers,
+    cropToRoi: settings.defaults.cropToRoi,
     layoutFitTolerance: String(settings.defaults.layoutFitTolerance),
     debugOneFrame: settings.defaults.debugOneFrame
   };

@@ -29,6 +29,7 @@ export type UiFormState = {
   roi: string;
   markersLayoutPath: string;
   labelMarkers: boolean;
+  cropToRoi: boolean;
   layoutFitTolerance: string;
   debugOneFrame: boolean;
 };
@@ -65,6 +66,7 @@ export const SEEDED_UI_SETTINGS: PersistedUiSettings = {
     roi: "238,1300,2300,2500",
     markersLayoutPath: "markers-layout.json",
     labelMarkers: true,
+    cropToRoi: false,
     layoutFitTolerance: "60",
     debugOneFrame: false
   }

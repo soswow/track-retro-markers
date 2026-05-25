@@ -79,6 +79,7 @@ export type TrackOptions = {
   localThresholdMin: number;
   markersLayoutPath?: string;
   labelMarkers?: boolean;
+  cropToRoi?: boolean;
   trailMarkerNames?: string[];
   layoutFitTolerance: number;
   regionOfInterest?: SearchWindow;
@@ -257,6 +258,7 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
   const metadata = await probeVideo(options.inputPath);
   const markerLayout = options.markersLayoutPath === undefined ? undefined : await readMarkerLayout(options.markersLayoutPath);
   const regionOfInterest = resolveRegionOfInterest(options.regionOfInterest, metadata);
+  const outputCropWindow = options.cropToRoi === true ? resolveOutputCropWindow(regionOfInterest, metadata) : undefined;
   const detectionWindows = regionOfInterest === undefined ? undefined : [regionOfInterest];
   const stopSeconds = options.stopSeconds ?? metadata.durationSeconds;
 
@@ -266,6 +268,11 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
 
   const outputPaths = await createOutputPaths(options, stopSeconds);
   const frameSize = metadata.width * metadata.height * 3;
+  const outputWidth =
+    outputCropWindow === undefined ? metadata.width : outputCropWindow.right - outputCropWindow.left;
+  const outputHeight =
+    outputCropWindow === undefined ? metadata.height : outputCropWindow.bottom - outputCropWindow.top;
+  const outputFrameSize = outputWidth * outputHeight * 3;
   const debugOneFrame = options.debugOneFrame === true;
   const shouldWriteDebugFrame = debugOneFrame && options.videoMode !== "none";
   const expectedFrameCount = estimateExpectedFrameCount(
@@ -286,7 +293,7 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
   const videoWriter =
     debugOneFrame || options.videoMode === "none"
       ? undefined
-      : createVideoWriter(outputPaths.videoPath ?? "", metadata.width, metadata.height, metadata.fps, frameSize, frameReadLimit);
+      : createVideoWriter(outputPaths.videoPath ?? "", outputWidth, outputHeight, metadata.fps, outputFrameSize, frameReadLimit);
   const ffmpeg = createFrameReader(options.inputPath, options.startSeconds, stopSeconds, metadata, frameReadLimit);
   let frameBuffer = Buffer.allocUnsafe(frameSize);
   let frameBufferOffset = 0;
@@ -430,7 +437,7 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
         if (shouldWriteDebugFrame) {
           await writePngFrame(outputPaths.debugFramePath ?? "", metadata.width, metadata.height, renderedFrame);
         } else if (videoWriter !== undefined) {
-          await writeFrame(videoWriter, renderedFrame);
+          await writeFrame(videoWriter, cropFrameToWindow(renderedFrame, metadata.width, outputCropWindow));
         }
       }
 
@@ -580,6 +587,40 @@ const resolveRegionOfInterest = (regionOfInterest: SearchWindow | undefined, met
   }
 
   return resolvedRegionOfInterest;
+};
+
+const resolveOutputCropWindow = (
+  regionOfInterest: SearchWindow | undefined,
+  metadata: VideoMetadata
+): SearchWindow | undefined => {
+  if (regionOfInterest === undefined) {
+    return undefined;
+  }
+
+  const outputCropWindow = { ...regionOfInterest };
+
+  // Keep H.264/yuv420p output compatible when a drawn ROI lands on odd dimensions.
+  if ((outputCropWindow.right - outputCropWindow.left) % 2 !== 0) {
+    if (outputCropWindow.right < metadata.width) {
+      outputCropWindow.right += 1;
+    } else if (outputCropWindow.left > 0) {
+      outputCropWindow.left -= 1;
+    } else if (outputCropWindow.right - outputCropWindow.left > 1) {
+      outputCropWindow.right -= 1;
+    }
+  }
+
+  if ((outputCropWindow.bottom - outputCropWindow.top) % 2 !== 0) {
+    if (outputCropWindow.bottom < metadata.height) {
+      outputCropWindow.bottom += 1;
+    } else if (outputCropWindow.top > 0) {
+      outputCropWindow.top -= 1;
+    } else if (outputCropWindow.bottom - outputCropWindow.top > 1) {
+      outputCropWindow.bottom -= 1;
+    }
+  }
+
+  return outputCropWindow;
 };
 
 const chooseLayoutAutoThreshold = (
@@ -1194,6 +1235,24 @@ const renderFrame = (
   }
 
   return outputFrame;
+};
+
+const cropFrameToWindow = (sourceFrame: Buffer, sourceWidth: number, cropWindow: SearchWindow | undefined): Buffer => {
+  if (cropWindow === undefined) {
+    return sourceFrame;
+  }
+
+  const cropWidth = cropWindow.right - cropWindow.left;
+  const cropHeight = cropWindow.bottom - cropWindow.top;
+  const croppedFrame = Buffer.allocUnsafe(cropWidth * cropHeight * 3);
+
+  for (let row = 0; row < cropHeight; row += 1) {
+    const sourceStart = ((cropWindow.top + row) * sourceWidth + cropWindow.left) * 3;
+    const sourceEnd = sourceStart + cropWidth * 3;
+    sourceFrame.copy(croppedFrame, row * cropWidth * 3, sourceStart, sourceEnd);
+  }
+
+  return croppedFrame;
 };
 
 const getMarkerClusterCenter = (assignedTracks: Array<Detection | undefined>): Point2d => {

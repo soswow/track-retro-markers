@@ -71,6 +71,7 @@ program
   .option("--roi <left,top,right,bottom>", "region of interest containing all markers", wrapParser(parseRegionOfInterest))
   .option("--markers-layout <path>", "JSON marker layout used to fit and label known markers")
   .option("--label-markers", "render marker names next to tracked markers")
+  .option("--crop-to-roi", "crop the rendered output video to the region of interest")
   .option("--layout-fit-tolerance <pixels>", "maximum marker-layout fit error per marker", wrapParser(parsePositiveNumber), 60)
   .option("--debug-one-frame", "write one rendered PNG frame instead of CSV or video output")
   .option("--no-progress", "disable the in-terminal progress bar")
@@ -97,6 +98,7 @@ program
       localThresholdMin: options.localThresholdMin as number,
       markersLayoutPath: options.markersLayout === undefined ? undefined : String(options.markersLayout),
       labelMarkers: options.labelMarkers === true,
+      cropToRoi: options.cropToRoi === true,
       layoutFitTolerance: options.layoutFitTolerance as number,
       roi: options.roi as TrackSettingsInput["roi"],
       debugOneFrame: options.debugOneFrame === true,

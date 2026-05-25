@@ -74,6 +74,7 @@ Use `--debug-one-frame` to render only the first analysed frame as a PNG, with n
 - `--search-radius <pixels>`: automatic per-marker local search radius after the first frame. Default: `180`.
 - `--local-threshold-min <value>`: lowest threshold allowed when searching around an existing track. Default: `180`.
 - `--roi <left,top,right,bottom>`: rectangular region of interest where all markers are expected, using top-left and lower-right pixel coordinates. Detection, layout fitting, reacquisition, and `pixels` output are limited to this region.
+- `--crop-to-roi`: crop the rendered output video to the ROI. Requires `--roi`.
 - `--markers-layout <path>`: JSON layout with known marker names, coordinates, optional derived markers, and lines to draw. Extra detected blobs that do not fit the layout are ignored.
 - `--label-markers`: render marker names next to tracked markers. Most useful with `--markers-layout`.
 - `--layout-fit-tolerance <pixels>`: maximum distance from a transformed layout marker to a detected blob while fitting the layout. Default: `60`.
@@ -85,7 +86,7 @@ Use `--debug-one-frame` to render only the first analysed frame as a PNG, with n
 
 Start the backend with a folder of input videos. The UI lists those files, lets you preview and scrub them, set start/stop from the playhead, configure the same tracking options as the CLI, run processing, and play or download the results.
 
-Use **Draw ROI** in the preview panel to drag a rectangle over the source video. The UI writes the selected source-pixel rectangle into the ROI field as `left,top,right,bottom`; use **Clear ROI** to remove it.
+Use **Draw ROI** in the preview panel to drag a rectangle over the source video. The UI writes the selected source-pixel rectangle into the ROI field as `left,top,right,bottom`; use **Clear ROI** to remove it. Enable **Crop to ROI** in the display tab to crop the rendered output video to that rectangle.
 
 The UI saves the selected video and all form values to `.track-retro-markers-ui-settings.json` as you edit, then restores them on reload. The default settings are seeded from the latest CLI-style run used during development.
 
@@ -93,7 +94,7 @@ Settings are split into three tabs:
 
 - **Source**: start/stop time, ROI, and marker layout.
 - **Processing**: threshold and marker detection/tracking parameters.
-- **Display**: output video mode, marker colors, trail rendering, labels, and debug output.
+- **Display**: output video mode, marker colors, trail rendering, labels, ROI cropping, and debug output.
 
 Enable **Preview threshold pixels** next to the threshold slider to switch the preview from the video player to a one-frame `pixels` preview generated with the current threshold, playhead time, ROI, and processing settings.
 

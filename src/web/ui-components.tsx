@@ -265,6 +265,16 @@ export const CheckboxField = styled.label`
   align-items: center;
   gap: 8px;
   font-size: 0.85rem;
+
+  &:has(input:disabled) {
+    opacity: 0.55;
+  }
+`;
+
+export const CheckboxList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 `;
 
 export const SliderRow = styled.div`

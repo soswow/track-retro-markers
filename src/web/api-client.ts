@@ -99,6 +99,7 @@ export const createJob = async (videoId: string, settings: JobFormState): Promis
     searchRadius: Number(settings.searchRadius),
     localThresholdMin: Number(settings.localThresholdMin),
     labelMarkers: settings.labelMarkers,
+    cropToRoi: settings.roi.length > 0 && settings.cropToRoi,
     layoutFitTolerance: Number(settings.layoutFitTolerance),
     debugOneFrame: settings.debugOneFrame
   };

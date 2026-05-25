@@ -33,6 +33,7 @@ export const DEFAULT_TRACK_SETTINGS = {
   localThresholdMin: 180,
   layoutFitTolerance: 60,
   labelMarkers: false,
+  cropToRoi: false,
   debugOneFrame: false,
   showProgress: true
 };
@@ -182,6 +183,7 @@ export type TrackSettingsInput = {
   roi?: string | RegionOfInterest;
   markersLayoutPath?: string;
   labelMarkers?: boolean;
+  cropToRoi?: boolean;
   layoutFitTolerance?: string | number;
   debugOneFrame?: boolean;
   showProgress?: boolean;
@@ -253,6 +255,7 @@ export const buildTrackOptions = (settings: TrackSettingsInput): TrackOptions =>
         : parseThresholdInteger(settings.localThresholdMin),
     markersLayoutPath: settings.markersLayoutPath,
     labelMarkers: settings.labelMarkers ?? DEFAULT_TRACK_SETTINGS.labelMarkers,
+    cropToRoi: settings.cropToRoi ?? DEFAULT_TRACK_SETTINGS.cropToRoi,
     layoutFitTolerance:
       settings.layoutFitTolerance === undefined
         ? DEFAULT_TRACK_SETTINGS.layoutFitTolerance
