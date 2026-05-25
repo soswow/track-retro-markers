@@ -1,6 +1,12 @@
 # Track Retro Markers
 
-TypeScript CLI and local web UI for tracking bright retro-reflective markers in video footage. It detects near-white clipped pixels, rejects colored LEDs by requiring balanced RGB channels, groups pixels into connected components, tracks marker centroids frame-to-frame, and exports both CSV data and optional visualization video.
+TypeScript CLI and local web UI for tracking bright retro-reflective markers in video footage. It detects near-white pixels whose RGB channels are all above the brightness threshold and close to each other, groups pixels into connected components, tracks marker centroids frame-to-frame, and exports both CSV data and optional visualization video.
+
+## Screenshots
+
+![Tracking options in the local web UI](docs/screenshots/web-ui-tracking-options.jpg)
+
+![Video preview and tracking output in the local web UI](docs/screenshots/web-ui-preview.jpg)
 
 ## Requirements
 
@@ -50,7 +56,7 @@ Use `--debug-one-frame` to render only the first analysed frame as a PNG, with n
 - `points`: black background with filled marker circles.
 - `trails`: black background with marker circles and fading trails.
 - `overlay`: original footage with marker circles and fading trails.
-- `pixels`: black background with white pixels wherever the source pixel passes the marker candidate checks.
+- `pixels`: black background with white pixels wherever the source pixel passes the threshold and fixed RGB balance checks.
 - `copy`: original footage with no tracking visualization.
 - `none`: write CSV only.
 
@@ -67,9 +73,9 @@ Use `--debug-one-frame` to render only the first analysed frame as a PNG, with n
 - `--trail-line-width <pixels>`: rendered trail line width. Default: `3`.
 - `--trail-seconds <seconds>`: fade duration for trail modes. Default: `2`.
 - `--trail-markers <names>`: comma-separated marker names to draw trails for in `trails` and `overlay` modes, for example `"main front camera,center"`. Default: all markers.
-- `--threshold <value>`: `auto` or an integer from `0` to `255`. Default: `auto`.
+- `--threshold <value>`: `auto` or an integer from `0` to `255`. A pixel must have all RGB channels at or above this value and within the fixed internal color-spread limit. Default: `auto`.
 - `--min-area <pixels>` and `--max-area <pixels>`: connected-component area filter. Defaults: `2` and `2500`.
-- `--merge-distance <pixels>`: merge nearby clipped components before assigning marker centroids. Default: `35`.
+- `--merge-distance <pixels>`: merge nearby candidate components before assigning marker centroids. Default: `35`.
 - `--max-track-distance <pixels>`: maximum frame-to-frame marker assignment distance. Default: `140`.
 - `--search-radius <pixels>`: automatic per-marker local search radius after the first frame. Default: `180`.
 - `--local-threshold-min <value>`: lowest threshold allowed when searching around an existing track. Default: `180`.
@@ -96,7 +102,7 @@ Settings are split into three tabs:
 - **Processing**: threshold and marker detection/tracking parameters.
 - **Display**: output video mode, marker colors, trail rendering, labels, ROI cropping, and debug output.
 
-Enable **Preview threshold pixels** next to the threshold slider to switch the preview from the video player to a one-frame `pixels` preview generated with the current threshold, playhead time, ROI, and processing settings.
+Enable **Preview threshold pixels** next to the threshold slider to switch the preview from the video player to a one-frame `pixels` preview generated with the current threshold, fixed RGB balance check, playhead time, ROI, and processing settings.
 
 Development (Vite dev server with API proxy):
 
