@@ -1,6 +1,6 @@
 # Track Retro Markers
 
-TypeScript CLI for tracking bright retro-reflective markers in video footage. It detects near-white clipped pixels, rejects colored LEDs by requiring balanced RGB channels, groups pixels into connected components, tracks marker centroids frame-to-frame, and exports both CSV data and optional visualization video.
+TypeScript CLI and local web UI for tracking bright retro-reflective markers in video footage. It detects near-white clipped pixels, rejects colored LEDs by requiring balanced RGB channels, groups pixels into connected components, tracks marker centroids frame-to-frame, and exports both CSV data and optional visualization video.
 
 ## Requirements
 
@@ -81,11 +81,62 @@ Use `--debug-one-frame` to render only the first analysed frame as a PNG, with n
 - `--debug-one-frame`: render one PNG for the first analysed frame instead of writing CSV or video output.
 - `--no-progress`: disable the in-terminal progress bar (enabled by default on interactive terminals).
 
+## Web UI
+
+Start the backend with a folder of input videos. The UI lists those files, lets you preview and scrub them, set start/stop from the playhead, configure the same tracking options as the CLI, run processing, and play or download the results.
+
+Use **Draw ROI** in the preview panel to drag a rectangle over the source video. The UI writes the selected source-pixel rectangle into the ROI field as `left,top,right,bottom`; use **Clear ROI** to remove it.
+
+The UI saves the selected video and all form values to `.track-retro-markers-ui-settings.json` as you edit, then restores them on reload. The default settings are seeded from the latest CLI-style run used during development.
+
+Settings are split into three tabs:
+
+- **Source**: start/stop time, ROI, and marker layout.
+- **Processing**: threshold and marker detection/tracking parameters.
+- **Display**: output video mode, marker colors, trail rendering, labels, and debug output.
+
+Enable **Preview threshold pixels** next to the threshold slider to switch the preview from the video player to a one-frame `pixels` preview generated with the current threshold, playhead time, ROI, and processing settings.
+
+Development (Vite dev server with API proxy):
+
+```sh
+npm run dev
+```
+
+Open `http://127.0.0.1:5173`. The dev server proxies `/api`, `/media`, and `/outputs` to the backend on port `3000`.
+
+Production-style (single server serves built UI + API):
+
+```sh
+npm run build
+npm run server -- --video-root inputs --output-root outputs --port 3000
+```
+
+Open `http://127.0.0.1:3000`.
+
+### Server options
+
+- `--video-root <path>`: folder containing input videos. Default: `inputs`.
+- `--output-root <path>`: folder for generated CSV, MP4, and PNG files. Default: `outputs`.
+- `--layout-root <path>`: folder containing marker layout JSON files listed in the UI. Default: project root (`.`).
+- `--settings-path <path>`: local JSON file used to persist UI selections. Default: `.track-retro-markers-ui-settings.json`.
+- `--host <address>`: bind address. Default: `127.0.0.1`.
+- `--port <number>`: port. Default: `3000`.
+
+Place videos in the video root (for example `inputs/`). Outputs are written to the output root and exposed at `/outputs/...` when a job completes.
+
 ## Development
 
 ```sh
 npm run build
 npm run lint
 ```
+
+Scripts:
+
+- `npm run track`: CLI tracking.
+- `npm run server`: backend API and static file serving.
+- `npm run web`: Vite dev server for the React UI.
+- `npm run dev`: run server and web UI together.
 
 The project uses ESLint with the `curly` rule to require braces for all control statements.

@@ -3,6 +3,7 @@ import { mkdir, readFile } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { once } from "node:events";
 import { spawn } from "node:child_process";
+import { setImmediate } from "node:timers/promises";
 import { createRequire } from "node:module";
 import { estimateExpectedFrameCount, ProgressReporter } from "./progress.js";
 
@@ -11,6 +12,7 @@ const ffmpegPath = require("ffmpeg-static") as string | null;
 const ffprobeStatic = require("ffprobe-static") as { path: string };
 const MAX_COLOR_SPREAD = 45;
 const MAX_CONSECUTIVE_LAYOUT_MISSES = 5;
+const PROGRESS_EVENT_LOOP_YIELD_INTERVAL = 5;
 const FONT_5X7: Record<string, string[]> = {
   " ": ["00000", "00000", "00000", "00000", "00000", "00000", "00000"],
   "-": ["00000", "00000", "00000", "11111", "00000", "00000", "00000"],
@@ -82,6 +84,14 @@ export type TrackOptions = {
   regionOfInterest?: SearchWindow;
   debugOneFrame?: boolean;
   showProgress?: boolean;
+  onProgress?: (progress: TrackProgress) => void;
+};
+
+export type TrackProgress = {
+  framesProcessed: number;
+  totalFrames?: number;
+  percent?: number;
+  phase?: "preparing" | "processing" | "finalizing";
 };
 
 export type RgbColor = {
@@ -296,6 +306,13 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
     startSeconds: options.startSeconds,
     stopSeconds
   });
+  options.onProgress?.({
+    framesProcessed: 0,
+    totalFrames: frameReadLimit,
+    percent: frameReadLimit === undefined ? undefined : 0,
+    phase: "preparing"
+  });
+  await setImmediate();
 
   let csvHeaderWritten = false;
 
@@ -418,6 +435,20 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
       }
 
       progressReporter.report(frameIndex);
+      options.onProgress?.({
+        framesProcessed: frameIndex + 1,
+        totalFrames: frameReadLimit,
+        percent:
+          frameReadLimit === undefined || frameReadLimit <= 0
+            ? undefined
+            : Math.min(100, ((frameIndex + 1) / frameReadLimit) * 100),
+        phase: "processing"
+      });
+
+      if (options.onProgress !== undefined && frameIndex % PROGRESS_EVENT_LOOP_YIELD_INTERVAL === 0) {
+        await setImmediate();
+      }
+
       frameIndex += 1;
       frameBuffer = Buffer.allocUnsafe(frameSize);
       frameBufferOffset = 0;
@@ -454,6 +485,13 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
 
   if (videoWriter !== undefined) {
     progressReporter.logStatus("Finalizing video...");
+    options.onProgress?.({
+      framesProcessed: frameIndex,
+      totalFrames: frameReadLimit,
+      percent: frameReadLimit === undefined ? undefined : 100,
+      phase: "finalizing"
+    });
+    await setImmediate();
     await finishVideoWriter(videoWriter);
   }
 
@@ -1624,7 +1662,7 @@ const formatTimeLabel = (value?: number): string => {
   return value.toFixed(3).replace(/\./gu, "p");
 };
 
-const probeVideo = async (inputPath: string): Promise<VideoMetadata> => {
+export const probeVideo = async (inputPath: string): Promise<VideoMetadata> => {
   const args = [
     "-v",
     "error",

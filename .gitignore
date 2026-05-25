@@ -1,5 +1,7 @@
 node_modules/
 outputs/
 dist/
+dist-web/
 inputs/
+.track-retro-markers-ui-settings.json
 .DS_Store
