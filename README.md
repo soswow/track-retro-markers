@@ -73,6 +73,7 @@ Use `--debug-one-frame` to render only the first analysed frame as a PNG, with n
 - `--max-track-distance <pixels>`: maximum frame-to-frame marker assignment distance. Default: `140`.
 - `--search-radius <pixels>`: automatic per-marker local search radius after the first frame. Default: `180`.
 - `--local-threshold-min <value>`: lowest threshold allowed when searching around an existing track. Default: `180`.
+- `--roi <left,top,right,bottom>`: rectangular region of interest where all markers are expected, using top-left and lower-right pixel coordinates. Detection, layout fitting, reacquisition, and `pixels` output are limited to this region.
 - `--markers-layout <path>`: JSON layout with known marker names, coordinates, optional derived markers, and lines to draw. Extra detected blobs that do not fit the layout are ignored.
 - `--label-markers`: render marker names next to tracked markers. Most useful with `--markers-layout`.
 - `--layout-fit-tolerance <pixels>`: maximum distance from a transformed layout marker to a detected blob while fitting the layout. Default: `60`.

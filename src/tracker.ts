@@ -79,6 +79,7 @@ export type TrackOptions = {
   labelMarkers?: boolean;
   trailMarkerNames?: string[];
   layoutFitTolerance: number;
+  regionOfInterest?: SearchWindow;
   debugOneFrame?: boolean;
   showProgress?: boolean;
 };
@@ -245,6 +246,8 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
 
   const metadata = await probeVideo(options.inputPath);
   const markerLayout = options.markersLayoutPath === undefined ? undefined : await readMarkerLayout(options.markersLayoutPath);
+  const regionOfInterest = resolveRegionOfInterest(options.regionOfInterest, metadata);
+  const detectionWindows = regionOfInterest === undefined ? undefined : [regionOfInterest];
   const stopSeconds = options.stopSeconds ?? metadata.durationSeconds;
 
   if (stopSeconds !== undefined && stopSeconds <= options.startSeconds) {
@@ -316,15 +319,15 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
       if (resolvedThreshold === undefined) {
         resolvedThreshold =
           markerLayout === undefined
-            ? detector.chooseAutoThreshold(frame)
-            : chooseLayoutAutoThreshold(detector, frame, markerLayout, options.layoutFitTolerance);
+            ? detector.chooseAutoThreshold(frame, detectionWindows)
+            : chooseLayoutAutoThreshold(detector, frame, markerLayout, options.layoutFitTolerance, detectionWindows);
       }
 
       let detections: Detection[];
       let assignedTracks: Array<Detection | undefined>;
 
       if (markerLayout !== undefined) {
-        detections = detector.detect(frame, resolvedThreshold);
+        detections = detector.detect(frame, resolvedThreshold, detectionWindows);
         const layoutFit = fitMarkerLayout(markerLayout, detections, options.layoutFitTolerance);
 
         if (layoutFit === undefined) {
@@ -332,7 +335,14 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
 
           if (consecutiveLayoutMisses >= MAX_CONSECUTIVE_LAYOUT_MISSES) {
             const debugFramePath = outputPaths.layoutMissDebugFramePath ?? "";
-            const pixelDebugFrame = renderPixelMask(frame, metadata.width, metadata.height, resolvedThreshold, MAX_COLOR_SPREAD);
+            const pixelDebugFrame = renderPixelMask(
+              frame,
+              metadata.width,
+              metadata.height,
+              resolvedThreshold,
+              MAX_COLOR_SPREAD,
+              regionOfInterest
+            );
             await writePngFrame(debugFramePath, metadata.width, metadata.height, pixelDebugFrame);
             generatedDebugFramePath = debugFramePath;
             frameProcessingComplete = true;
@@ -357,7 +367,7 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
           hasAcquiredTracks = assignedTracks.length > 0;
         }
       } else if (!hasAcquiredTracks) {
-        detections = detector.detect(frame, resolvedThreshold);
+        detections = detector.detect(frame, resolvedThreshold, detectionWindows);
         assignedTracks = assignInitialDetections(detections);
         searchTracks = assignedTracks;
         histories = Array.from({ length: assignedTracks.length }, () => [] as TrackPoint[]);
@@ -365,11 +375,11 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
         trackDerivedFlags = assignedTracks.map(() => false);
         hasAcquiredTracks = true;
       } else {
-        assignedTracks = trackDetectionsLocally(frame, detector, searchTracks, resolvedThreshold, options, metadata);
+        assignedTracks = trackDetectionsLocally(frame, detector, searchTracks, resolvedThreshold, options, metadata, regionOfInterest);
         searchTracks = searchTracks.map((previousDetection, trackIndex) => assignedTracks[trackIndex] ?? previousDetection);
 
         if (assignedTracks.some((detection) => detection === undefined)) {
-          detections = detector.detect(frame, resolvedThreshold);
+          detections = detector.detect(frame, resolvedThreshold, detectionWindows);
           assignedTracks = reacquireMissingTracks(detections, assignedTracks, searchTracks, options);
           searchTracks = searchTracks.map((previousDetection, trackIndex) => assignedTracks[trackIndex] ?? previousDetection);
         }
@@ -396,7 +406,8 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
           trackLabels,
           trackDerivedFlags,
           markerLayout,
-          currentLayoutFit
+          currentLayoutFit,
+          regionOfInterest
         );
 
         if (shouldWriteDebugFrame) {
@@ -514,23 +525,43 @@ const readMarkerLayout = async (layoutPath: string): Promise<MarkerLayout> => {
   return { markers, lines };
 };
 
+const resolveRegionOfInterest = (regionOfInterest: SearchWindow | undefined, metadata: VideoMetadata): SearchWindow | undefined => {
+  if (regionOfInterest === undefined) {
+    return undefined;
+  }
+
+  const resolvedRegionOfInterest = {
+    left: Math.max(0, Math.min(metadata.width, Math.floor(regionOfInterest.left))),
+    top: Math.max(0, Math.min(metadata.height, Math.floor(regionOfInterest.top))),
+    right: Math.max(0, Math.min(metadata.width, Math.ceil(regionOfInterest.right))),
+    bottom: Math.max(0, Math.min(metadata.height, Math.ceil(regionOfInterest.bottom)))
+  };
+
+  if (resolvedRegionOfInterest.right <= resolvedRegionOfInterest.left || resolvedRegionOfInterest.bottom <= resolvedRegionOfInterest.top) {
+    throw new Error("--roi must define a non-empty rectangle inside the video frame");
+  }
+
+  return resolvedRegionOfInterest;
+};
+
 const chooseLayoutAutoThreshold = (
   detector: MarkerDetector,
   frame: Buffer,
   markerLayout: MarkerLayout,
-  layoutFitTolerance: number
+  layoutFitTolerance: number,
+  searchWindows?: SearchWindow[]
 ): number => {
   const thresholdsToTry = [255, 252, 250, 248, 245, 242, 240, 235, 230, 225, 220];
 
   for (const threshold of thresholdsToTry) {
-    const detections = detector.detect(frame, threshold);
+    const detections = detector.detect(frame, threshold, searchWindows);
 
     if (fitMarkerLayout(markerLayout, detections, layoutFitTolerance) !== undefined) {
       return threshold;
     }
   }
 
-  return detector.chooseAutoThreshold(frame);
+  return detector.chooseAutoThreshold(frame, searchWindows);
 };
 
 const fitMarkerLayout = (markerLayout: MarkerLayout, detections: Detection[], tolerance: number): LayoutFit | undefined => {
@@ -699,11 +730,11 @@ class MarkerDetector {
     this.options = options;
   }
 
-  public chooseAutoThreshold(frame: Buffer): number {
+  public chooseAutoThreshold(frame: Buffer, searchWindows?: SearchWindow[]): number {
     const thresholdsToTry = [255, 252, 250, 248, 245, 242, 240, 235, 230, 225, 220];
 
     for (const threshold of thresholdsToTry) {
-      const detections = this.detect(frame, threshold);
+      const detections = this.detect(frame, threshold, searchWindows);
 
       if (detections.length > 0) {
         return threshold;
@@ -836,7 +867,8 @@ const trackDetectionsLocally = (
   searchTracks: Array<Detection | undefined>,
   resolvedThreshold: number,
   options: TrackOptions,
-  metadata: VideoMetadata
+  metadata: VideoMetadata,
+  regionOfInterest?: SearchWindow
 ): Array<Detection | undefined> => {
   const assignedTracks: Array<Detection | undefined> = Array.from({ length: searchTracks.length }, () => undefined);
 
@@ -847,7 +879,12 @@ const trackDetectionsLocally = (
       continue;
     }
 
-    const searchWindow = createSearchWindow(previousDetection, metadata, options.searchRadius);
+    const searchWindow = createSearchWindow(previousDetection, metadata, options.searchRadius, regionOfInterest);
+
+    if (searchWindow === undefined) {
+      continue;
+    }
+
     const localDetection = detector.detectClosestInWindow(
       frame,
       previousDetection,
@@ -917,14 +954,32 @@ const sortInitialDetections = (detections: Detection[]): Detection[] => {
 const createSearchWindow = (
   detection: Detection,
   metadata: VideoMetadata,
-  searchRadius: number
-): SearchWindow => {
-  return {
+  searchRadius: number,
+  regionOfInterest?: SearchWindow
+): SearchWindow | undefined => {
+  const searchWindow = {
     left: Math.max(0, Math.floor(detection.x - searchRadius)),
     top: Math.max(0, Math.floor(detection.y - searchRadius)),
     right: Math.min(metadata.width, Math.ceil(detection.x + searchRadius)),
     bottom: Math.min(metadata.height, Math.ceil(detection.y + searchRadius))
   };
+
+  return regionOfInterest === undefined ? searchWindow : intersectSearchWindows(searchWindow, regionOfInterest);
+};
+
+const intersectSearchWindows = (leftWindow: SearchWindow, rightWindow: SearchWindow): SearchWindow | undefined => {
+  const intersection = {
+    left: Math.max(leftWindow.left, rightWindow.left),
+    top: Math.max(leftWindow.top, rightWindow.top),
+    right: Math.min(leftWindow.right, rightWindow.right),
+    bottom: Math.min(leftWindow.bottom, rightWindow.bottom)
+  };
+
+  if (intersection.right <= intersection.left || intersection.bottom <= intersection.top) {
+    return undefined;
+  }
+
+  return intersection;
 };
 
 const findClosestDetection = (
@@ -1024,10 +1079,11 @@ const renderFrame = (
   trackLabels: string[],
   trackDerivedFlags: boolean[],
   markerLayout?: MarkerLayout,
-  layoutFit?: LayoutFit
+  layoutFit?: LayoutFit,
+  regionOfInterest?: SearchWindow
 ): Buffer => {
   if (options.videoMode === "pixels") {
-    return renderPixelMask(sourceFrame, metadata.width, metadata.height, threshold, MAX_COLOR_SPREAD);
+    return renderPixelMask(sourceFrame, metadata.width, metadata.height, threshold, MAX_COLOR_SPREAD, regionOfInterest);
   }
 
   if (options.videoMode === "copy") {
@@ -1278,19 +1334,37 @@ const drawLayoutLines = (
   }
 };
 
-const renderPixelMask = (sourceFrame: Buffer, width: number, height: number, threshold: number, maxColorSpread: number): Buffer => {
+const renderPixelMask = (
+  sourceFrame: Buffer,
+  width: number,
+  height: number,
+  threshold: number,
+  maxColorSpread: number,
+  regionOfInterest?: SearchWindow
+): Buffer => {
   const outputFrame = Buffer.alloc(width * height * 3, 0);
-  const pixelCount = width * height;
+  const searchWindow = regionOfInterest ?? {
+    left: 0,
+    top: 0,
+    right: width,
+    bottom: height
+  };
 
-  for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
-    if (!isCandidatePixel(sourceFrame, pixelIndex, threshold, maxColorSpread)) {
-      continue;
+  for (let y = searchWindow.top; y < searchWindow.bottom; y += 1) {
+    const rowOffset = y * width;
+
+    for (let x = searchWindow.left; x < searchWindow.right; x += 1) {
+      const pixelIndex = rowOffset + x;
+
+      if (!isCandidatePixel(sourceFrame, pixelIndex, threshold, maxColorSpread)) {
+        continue;
+      }
+
+      const bufferIndex = pixelIndex * 3;
+      outputFrame[bufferIndex] = 255;
+      outputFrame[bufferIndex + 1] = 255;
+      outputFrame[bufferIndex + 2] = 255;
     }
-
-    const bufferIndex = pixelIndex * 3;
-    outputFrame[bufferIndex] = 255;
-    outputFrame[bufferIndex + 1] = 255;
-    outputFrame[bufferIndex + 2] = 255;
   }
 
   return outputFrame;

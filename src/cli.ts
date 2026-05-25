@@ -83,6 +83,27 @@ const parseMarkerNameList = (value: string): string[] => {
   return markerNames;
 };
 
+const parseRegionOfInterest = (value: string): { left: number; top: number; right: number; bottom: number } => {
+  const coordinates = value.split(",").map((coordinate) => Number(coordinate.trim()));
+
+  if (coordinates.length !== 4 || coordinates.some((coordinate) => !Number.isFinite(coordinate))) {
+    throw new InvalidArgumentError("Expected four comma-separated coordinates: left,top,right,bottom.");
+  }
+
+  const [left = 0, top = 0, right = 0, bottom = 0] = coordinates;
+
+  if (right <= left || bottom <= top) {
+    throw new InvalidArgumentError("Expected right > left and bottom > top.");
+  }
+
+  return {
+    left,
+    top,
+    right,
+    bottom
+  };
+};
+
 const program = new Command();
 
 program
@@ -107,6 +128,7 @@ program
   .option("--max-track-distance <pixels>", "maximum per-frame marker assignment distance", parsePositiveNumber, 140)
   .option("--search-radius <pixels>", "automatic per-marker local search radius after the first frame", parsePositiveNumber, 180)
   .option("--local-threshold-min <value>", "lowest threshold allowed when searching around an existing track", parseThresholdInteger, 180)
+  .option("--roi <left,top,right,bottom>", "region of interest containing all markers", parseRegionOfInterest)
   .option("--markers-layout <path>", "JSON marker layout used to fit and label known markers")
   .option("--label-markers", "render marker names next to tracked markers")
   .option("--layout-fit-tolerance <pixels>", "maximum marker-layout fit error per marker", parsePositiveNumber, 60)
@@ -140,6 +162,7 @@ program
       markersLayoutPath: options.markersLayout === undefined ? undefined : String(options.markersLayout),
       labelMarkers: options.labelMarkers === true,
       layoutFitTolerance: options.layoutFitTolerance as number,
+      regionOfInterest: options.roi as { left: number; top: number; right: number; bottom: number } | undefined,
       debugOneFrame: options.debugOneFrame === true,
       showProgress: options.progress !== false
     });
