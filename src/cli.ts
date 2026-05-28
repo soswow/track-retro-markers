@@ -42,6 +42,8 @@ program
   .option("--trail-line-width <pixels>", "rendered trail line width", wrapParser(parsePositiveInteger), 3)
   .option("--trail-seconds <seconds>", "trail fade duration for trails and overlay modes", wrapParser(parsePositiveNumber), 2)
   .option("--trail-markers <names>", "comma-separated marker names to draw trails for", wrapParser(parseMarkerNameList))
+  .option("--csv-export-markers <names>", "comma-separated marker names to include in CSV output", wrapParser(parseMarkerNameList))
+  .option("--include-csv-diff-columns", "add diff_ x/y columns measured from each exported marker's first value")
   .option("--min-area <pixels>", "minimum connected component area", wrapParser(parsePositiveInteger), 2)
   .option("--max-area <pixels>", "maximum connected component area", wrapParser(parsePositiveInteger), 2500)
   .option(
@@ -70,6 +72,8 @@ program
   )
   .option("--roi <left,top,right,bottom>", "region of interest containing all markers", wrapParser(parseRegionOfInterest))
   .option("--markers-layout <path>", "JSON marker layout used to fit and label known markers")
+  .option("--use-layout-units", "scale CSV marker coordinates into marker layout units")
+  .option("--track-local-y-axis-angle", "add the local Y-axis image angle to the CSV output")
   .option("--label-markers", "render marker names next to tracked markers")
   .option("--crop-to-roi", "crop the rendered output video to the region of interest")
   .option("--layout-fit-tolerance <pixels>", "maximum marker-layout fit error per marker", wrapParser(parsePositiveNumber), 60)
@@ -90,6 +94,8 @@ program
       trailLineWidth: options.trailLineWidth as number,
       trailSeconds: options.trailSeconds as number,
       trailMarkers: options.trailMarkers as string[] | undefined,
+      csvExportMarkers: options.csvExportMarkers as string[] | undefined,
+      includeCsvDiffColumns: options.includeCsvDiffColumns === true,
       minArea: options.minArea as number,
       maxArea: options.maxArea as number,
       mergeDistance: options.mergeDistance as number,
@@ -97,6 +103,8 @@ program
       searchRadius: options.searchRadius as number,
       localThresholdMin: options.localThresholdMin as number,
       markersLayoutPath: options.markersLayout === undefined ? undefined : String(options.markersLayout),
+      useLayoutUnits: options.useLayoutUnits === true,
+      trackLocalYAxisAngle: options.trackLocalYAxisAngle === true,
       labelMarkers: options.labelMarkers === true,
       cropToRoi: options.cropToRoi === true,
       layoutFitTolerance: options.layoutFitTolerance as number,

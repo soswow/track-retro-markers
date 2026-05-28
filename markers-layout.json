@@ -14,7 +14,8 @@
         },
         {
             "name": "main front camera",
-            "coordinates": [-5.313611, 102.45837]
+            "coordinates": [-5.313611, 102.45837],
+            "isLocalOrigin": true
         },
         {
             "name": "left front camera",
@@ -52,7 +53,8 @@
         {
             "name": "front motors line",
             "from": "right front motor",
-            "to": "left front motor"
+            "to": "left front motor",
+            "isLocalXAxis": true
         },
         {
             "name": "main axis",
@@ -64,5 +66,6 @@
             "from": "rear right motor",
             "to": "rear left motor"
         }
-    ]
+    ],
+    "units": "mm"
 }

@@ -187,6 +187,14 @@ export const PreviewPanel = ({
             <SecondaryButton
               type="button"
               onClick={() => {
+                onStepFrames(-100);
+              }}
+            >
+              {"<<<"}
+            </SecondaryButton>
+            <SecondaryButton
+              type="button"
+              onClick={() => {
                 onStepFrames(-10);
               }}
             >
@@ -215,6 +223,14 @@ export const PreviewPanel = ({
               }}
             >
               {">>"}
+            </SecondaryButton>
+            <SecondaryButton
+              type="button"
+              onClick={() => {
+                onStepFrames(100);
+              }}
+            >
+              {">>>"}
             </SecondaryButton>
           </TimeControls>
         )}

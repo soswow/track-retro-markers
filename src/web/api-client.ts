@@ -101,7 +101,9 @@ export const createJob = async (videoId: string, settings: JobFormState): Promis
     labelMarkers: settings.labelMarkers,
     cropToRoi: settings.roi.length > 0 && settings.cropToRoi,
     layoutFitTolerance: Number(settings.layoutFitTolerance),
-    debugOneFrame: settings.debugOneFrame
+    debugOneFrame: settings.debugOneFrame,
+    trackLocalYAxisAngle: settings.trackLocalYAxisAngle,
+    includeCsvDiffColumns: settings.includeCsvDiffColumns
   };
 
   if (settings.stopSeconds.length > 0) {
@@ -119,6 +121,12 @@ export const createJob = async (videoId: string, settings: JobFormState): Promis
   if (settings.trailMarkers.length > 0) {
     payload.trailMarkers = settings.trailMarkers;
   }
+
+  if (settings.csvExportMarkers.length > 0) {
+    payload.csvExportMarkers = settings.csvExportMarkers;
+  }
+
+  payload.useLayoutUnits = settings.useLayoutUnits;
 
   if (settings.roi.length > 0) {
     payload.roi = settings.roi;

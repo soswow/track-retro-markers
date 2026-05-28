@@ -20,6 +20,7 @@ export type UiFormState = {
   trailLineWidth: string;
   trailSeconds: string;
   trailMarkers: string;
+  csvExportMarkers: string;
   minArea: string;
   maxArea: string;
   mergeDistance: string;
@@ -32,6 +33,9 @@ export type UiFormState = {
   cropToRoi: boolean;
   layoutFitTolerance: string;
   debugOneFrame: boolean;
+  useLayoutUnits: boolean;
+  trackLocalYAxisAngle: boolean;
+  includeCsvDiffColumns: boolean;
 };
 
 export type PersistedUiSettings = {
@@ -57,6 +61,7 @@ export const SEEDED_UI_SETTINGS: PersistedUiSettings = {
     trailLineWidth: "4",
     trailSeconds: "20",
     trailMarkers: "main front camera",
+    csvExportMarkers: "",
     minArea: "10",
     maxArea: "2500",
     mergeDistance: "10",
@@ -68,7 +73,10 @@ export const SEEDED_UI_SETTINGS: PersistedUiSettings = {
     labelMarkers: true,
     cropToRoi: false,
     layoutFitTolerance: "60",
-    debugOneFrame: false
+    debugOneFrame: false,
+    useLayoutUnits: false,
+    trackLocalYAxisAngle: false,
+    includeCsvDiffColumns: false
   }
 };
 

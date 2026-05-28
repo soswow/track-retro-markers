@@ -26,6 +26,7 @@ export const createPixelsPreview = async (
     stopSeconds: request.previewSeconds + 0.05,
     videoMode: "pixels",
     debugOneFrame: true,
+    useLayoutUnits: false,
     showProgress: false
   } as Omit<TrackSettingsInput, "inputPath">);
 

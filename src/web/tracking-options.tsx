@@ -47,6 +47,11 @@ const fieldDescriptions = {
   trailLineWidth: "Width, in pixels, for rendered trail lines.",
   trailSeconds: "How many seconds of marker movement remain visible in trail modes.",
   trailMarkers: "Select named markers to draw trails for. Leave empty to draw trails for all markers.",
+  csvExportMarkers: "Select named markers to include in the CSV export. Leave empty to export all markers.",
+  includeCsvDiffColumns: "Add diff_ x/y CSV columns for each exported marker, measured from that marker's first exported value.",
+  useLayoutUnits: "Scale CSV coordinates into the selected marker layout units and include the per-frame scale.",
+  trackLocalYAxisAngle:
+    "Add a CSV column for the local Y-axis angle in image coordinates. Requires a layout with isLocalOrigin and isLocalXAxis.",
   labelMarkers: "Draw marker names next to tracked markers in the output video.",
   cropToRoi: "Crop the rendered output video to the region of interest.",
   debugOneFrame: "Process a single frame and write a debug image instead of a full output video."
@@ -112,7 +117,12 @@ export const TrackingOptions = ({
     .split(",")
     .map((markerName) => markerName.trim())
     .filter((markerName) => markerName.length > 0);
+  const selectedCsvExportMarkers = formState.csvExportMarkers
+    .split(",")
+    .map((markerName) => markerName.trim())
+    .filter((markerName) => markerName.length > 0);
   const isTrailMarkersDisabled = selectedLayout === undefined || selectedLayout.markerNames.length === 0;
+  const isCsvExportMarkersDisabled = selectedLayout === undefined || selectedLayout.markerNames.length === 0;
   const hasValidRoi = parseRoiValue(formState.roi) !== undefined;
 
   return (
@@ -218,8 +228,15 @@ export const TrackingOptions = ({
                 <FieldSelect
                   value={formState.markersLayoutPath}
                   onChange={(event) => {
-                    onUpdateFormValue("markersLayoutPath", event.target.value);
+                    const nextMarkersLayoutPath = event.target.value;
+
+                    onUpdateFormValue("markersLayoutPath", nextMarkersLayoutPath);
                     onUpdateFormValue("trailMarkers", "");
+                    onUpdateFormValue("csvExportMarkers", "");
+                    if (nextMarkersLayoutPath.length === 0) {
+                      onUpdateFormValue("useLayoutUnits", false);
+                      onUpdateFormValue("trackLocalYAxisAngle", false);
+                    }
                   }}
                 >
                   <option value="">None</option>
@@ -429,8 +446,59 @@ export const TrackingOptions = ({
                   ))}
                 </FieldSelect>
               </Field>
+              <Field>
+                <LabelWithInfo description={fieldDescriptions.csvExportMarkers}>CSV Export markers</LabelWithInfo>
+                <FieldSelect
+                  disabled={isCsvExportMarkersDisabled}
+                  multiple
+                  value={selectedCsvExportMarkers}
+                  onChange={(event) => {
+                    const nextCsvExportMarkers = Array.from(event.target.selectedOptions, (option) => option.value);
+
+                    onUpdateFormValue("csvExportMarkers", nextCsvExportMarkers.join(", "));
+                  }}
+                >
+                  {selectedLayout?.markerNames.map((markerName) => (
+                    <option key={markerName} value={markerName}>
+                      {markerName}
+                    </option>
+                  ))}
+                </FieldSelect>
+              </Field>
             </OptionsGrid>
             <CheckboxList style={{ marginTop: "12px" }}>
+              <CheckboxField>
+                <input
+                  checked={formState.includeCsvDiffColumns}
+                  type="checkbox"
+                  onChange={(event) => {
+                    onUpdateFormValue("includeCsvDiffColumns", event.target.checked);
+                  }}
+                />
+                <LabelWithInfo description={fieldDescriptions.includeCsvDiffColumns}>Include CSV diff columns</LabelWithInfo>
+              </CheckboxField>
+              <CheckboxField>
+                <input
+                  checked={selectedLayout !== undefined && formState.useLayoutUnits}
+                  disabled={selectedLayout === undefined}
+                  type="checkbox"
+                  onChange={(event) => {
+                    onUpdateFormValue("useLayoutUnits", event.target.checked);
+                  }}
+                />
+                <LabelWithInfo description={fieldDescriptions.useLayoutUnits}>Use Layout units</LabelWithInfo>
+              </CheckboxField>
+              <CheckboxField>
+                <input
+                  checked={selectedLayout !== undefined && formState.trackLocalYAxisAngle}
+                  disabled={selectedLayout === undefined}
+                  type="checkbox"
+                  onChange={(event) => {
+                    onUpdateFormValue("trackLocalYAxisAngle", event.target.checked);
+                  }}
+                />
+                <LabelWithInfo description={fieldDescriptions.trackLocalYAxisAngle}>Track local Y-axis angle</LabelWithInfo>
+              </CheckboxField>
               <CheckboxField>
                 <input
                   checked={formState.labelMarkers}

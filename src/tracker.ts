@@ -81,9 +81,13 @@ export type TrackOptions = {
   labelMarkers?: boolean;
   cropToRoi?: boolean;
   trailMarkerNames?: string[];
+  csvExportMarkerNames?: string[];
+  includeCsvDiffColumns?: boolean;
+  trackLocalYAxisAngle?: boolean;
   layoutFitTolerance: number;
   regionOfInterest?: SearchWindow;
   debugOneFrame?: boolean;
+  useLayoutUnits: boolean;
   showProgress?: boolean;
   onProgress?: (progress: TrackProgress) => void;
 };
@@ -129,17 +133,32 @@ type LayoutMarker = {
   name: string;
   point: Point2d;
   isDerived: boolean;
+  isLocalOrigin: boolean;
 };
 
 type LayoutLine = {
   name: string;
   from: string;
   to: string;
+  isLocalXAxis: boolean;
 };
 
 type MarkerLayout = {
   markers: LayoutMarker[];
   lines: LayoutLine[];
+  units?: string;
+};
+
+type LayoutScaleReference = {
+  fromIndex: number;
+  toIndex: number;
+  layoutDistance: number;
+};
+
+type LocalYAxisReference = {
+  origin: Point2d;
+  xAxisFrom: Point2d;
+  xAxisTo: Point2d;
 };
 
 type LayoutFit = {
@@ -257,6 +276,9 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
 
   const metadata = await probeVideo(options.inputPath);
   const markerLayout = options.markersLayoutPath === undefined ? undefined : await readMarkerLayout(options.markersLayoutPath);
+  const layoutScaleReference =
+    markerLayout === undefined ? undefined : findLongestLayoutLineScaleReference(markerLayout);
+  const localYAxisReference = markerLayout === undefined ? undefined : findLocalYAxisReference(markerLayout);
   const regionOfInterest = resolveRegionOfInterest(options.regionOfInterest, metadata);
   const outputCropWindow = options.cropToRoi === true ? resolveOutputCropWindow(regionOfInterest, metadata) : undefined;
   const detectionWindows = regionOfInterest === undefined ? undefined : [regionOfInterest];
@@ -264,6 +286,22 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
 
   if (stopSeconds !== undefined && stopSeconds <= options.startSeconds) {
     throw new Error("--stop must be greater than --start");
+  }
+
+  if (options.useLayoutUnits && markerLayout === undefined) {
+    throw new Error("Using layout units requires --markers-layout.");
+  }
+
+  if (options.useLayoutUnits && layoutScaleReference === undefined) {
+    throw new Error("Using layout units requires at least one non-zero marker layout line.");
+  }
+
+  if (options.trackLocalYAxisAngle === true && markerLayout === undefined) {
+    throw new Error("Tracking the local Y-axis angle requires --markers-layout.");
+  }
+
+  if (options.trackLocalYAxisAngle === true && localYAxisReference === undefined) {
+    throw new Error("Tracking the local Y-axis angle requires one isLocalOrigin marker and one non-zero isLocalXAxis line.");
   }
 
   const outputPaths = await createOutputPaths(options, stopSeconds);
@@ -322,6 +360,7 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
   await setImmediate();
 
   let csvHeaderWritten = false;
+  const csvDiffReferenceCoordinates: Array<Point2d | undefined> = [];
 
   let frameProcessingComplete = false;
 
@@ -349,6 +388,7 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
 
       let detections: Detection[];
       let assignedTracks: Array<Detection | undefined>;
+      let frameLayoutFit: LayoutFit | undefined;
 
       if (markerLayout !== undefined) {
         detections = detector.detect(frame, resolvedThreshold, detectionWindows);
@@ -373,6 +413,7 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
           }
         } else {
           currentLayoutFit = layoutFit;
+          frameLayoutFit = layoutFit;
           consecutiveLayoutMisses = 0;
         }
 
@@ -411,11 +452,37 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
 
       if (csvStream !== undefined) {
         if (!csvHeaderWritten) {
-          csvStream.write(createCsvHeader(trackLabels));
+          const headerLabels = markerLayout?.markers.map((marker) => marker.name) ?? trackLabels;
+          const csvColumnSelection = createCsvColumnSelection(headerLabels, options.csvExportMarkerNames);
+
+          csvStream.write(createCsvHeader(csvColumnSelection.labels, {
+            coordinateUnits: options.useLayoutUnits ? markerLayout?.units : undefined,
+            includeDiffColumns: options.includeCsvDiffColumns === true,
+            includeLayoutScale: options.useLayoutUnits,
+            includeLocalYAxisAngle: options.trackLocalYAxisAngle === true
+          }));
           csvHeaderWritten = true;
         }
 
-        writeCsvRow(csvStream, frameIndex, metadata.fps, assignedTracks);
+        const rowLabels = markerLayout?.markers.map((marker) => marker.name) ?? trackLabels;
+        const csvColumnSelection = createCsvColumnSelection(rowLabels, options.csvExportMarkerNames);
+        const layoutUnitScale =
+          options.useLayoutUnits && layoutScaleReference !== undefined && frameLayoutFit !== undefined
+            ? calculateFrameLayoutUnitScale(assignedTracks, layoutScaleReference)
+            : undefined;
+        const localYAxisAngle =
+          options.trackLocalYAxisAngle === true && localYAxisReference !== undefined && frameLayoutFit !== undefined
+            ? calculateLocalYAxisAngle(localYAxisReference, frameLayoutFit.transform)
+            : undefined;
+
+        writeCsvRow(csvStream, frameIndex, metadata.fps, assignedTracks, csvColumnSelection.trackIndices, {
+          coordinateScale: options.useLayoutUnits ? layoutUnitScale : undefined,
+          diffReferenceCoordinates: csvDiffReferenceCoordinates,
+          includeDiffColumns: options.includeCsvDiffColumns === true,
+          includeLayoutScale: options.useLayoutUnits,
+          includeLocalYAxisAngle: options.trackLocalYAxisAngle === true,
+          localYAxisAngle
+        });
       }
 
       if (videoWriter !== undefined || shouldWriteDebugFrame) {
@@ -483,7 +550,12 @@ export const trackRetroMarkers = async (options: TrackOptions): Promise<TrackRes
 
   if (csvStream !== undefined) {
     if (!csvHeaderWritten) {
-      csvStream.write(createCsvHeader([]));
+      csvStream.write(createCsvHeader([], {
+        coordinateUnits: options.useLayoutUnits ? markerLayout?.units : undefined,
+        includeDiffColumns: options.includeCsvDiffColumns === true,
+        includeLayoutScale: options.useLayoutUnits,
+        includeLocalYAxisAngle: options.trackLocalYAxisAngle === true
+      }));
     }
 
     csvStream.end();
@@ -518,12 +590,15 @@ const readMarkerLayout = async (layoutPath: string): Promise<MarkerLayout> => {
       name?: unknown;
       coordinates?: unknown;
       isDerived?: unknown;
+      isLocalOrigin?: unknown;
     }>;
     lines?: Array<{
       name?: unknown;
       from?: unknown;
       to?: unknown;
+      isLocalXAxis?: unknown;
     }>;
+    units?: unknown;
   };
 
   const markers =
@@ -544,7 +619,8 @@ const readMarkerLayout = async (layoutPath: string): Promise<MarkerLayout> => {
           x: marker.coordinates[0],
           y: marker.coordinates[1]
         },
-        isDerived: marker.isDerived === true
+        isDerived: marker.isDerived === true,
+        isLocalOrigin: marker.isLocalOrigin === true
       };
     }) ?? [];
 
@@ -557,7 +633,8 @@ const readMarkerLayout = async (layoutPath: string): Promise<MarkerLayout> => {
       return {
         name: line.name,
         from: line.from,
-        to: line.to
+        to: line.to,
+        isLocalXAxis: line.isLocalXAxis === true
       };
     }) ?? [];
 
@@ -567,7 +644,11 @@ const readMarkerLayout = async (layoutPath: string): Promise<MarkerLayout> => {
     throw new Error(`Marker layout must contain at least two non-derived markers: ${layoutPath}`);
   }
 
-  return { markers, lines };
+  return {
+    markers,
+    lines,
+    units: typeof rawLayout.units === "string" && rawLayout.units.trim().length > 0 ? rawLayout.units.trim() : undefined
+  };
 };
 
 const resolveRegionOfInterest = (regionOfInterest: SearchWindow | undefined, metadata: VideoMetadata): SearchWindow | undefined => {
@@ -1136,6 +1217,140 @@ const squaredDistance = (left: Point2d, right: Point2d): number => {
   return (left.x - right.x) ** 2 + (left.y - right.y) ** 2;
 };
 
+const findLongestLayoutLineScaleReference = (markerLayout: MarkerLayout): LayoutScaleReference | undefined => {
+  const markerEntriesByName = new Map(markerLayout.markers.map((marker, markerIndex) => [marker.name, { marker, markerIndex }]));
+  let longestReference: LayoutScaleReference | undefined;
+
+  for (const line of markerLayout.lines) {
+    const fromEntry = markerEntriesByName.get(line.from);
+    const toEntry = markerEntriesByName.get(line.to);
+
+    if (fromEntry === undefined || toEntry === undefined) {
+      continue;
+    }
+
+    const layoutDistance = Math.sqrt(squaredDistance(fromEntry.marker.point, toEntry.marker.point));
+
+    if (layoutDistance === 0) {
+      continue;
+    }
+
+    if (longestReference === undefined || layoutDistance > longestReference.layoutDistance) {
+      longestReference = {
+        fromIndex: fromEntry.markerIndex,
+        toIndex: toEntry.markerIndex,
+        layoutDistance
+      };
+    }
+  }
+
+  return longestReference;
+};
+
+const calculateFrameLayoutUnitScale = (
+  assignedTracks: Array<Detection | undefined>,
+  layoutScaleReference: LayoutScaleReference
+): number | undefined => {
+  const fromDetection = assignedTracks[layoutScaleReference.fromIndex];
+  const toDetection = assignedTracks[layoutScaleReference.toIndex];
+
+  if (fromDetection === undefined || toDetection === undefined) {
+    return undefined;
+  }
+
+  const pixelDistance = Math.sqrt(squaredDistance(fromDetection, toDetection));
+
+  if (pixelDistance === 0) {
+    return undefined;
+  }
+
+  return layoutScaleReference.layoutDistance / pixelDistance;
+};
+
+const findLocalYAxisReference = (markerLayout: MarkerLayout): LocalYAxisReference | undefined => {
+  const originMarker = markerLayout.markers.find((marker) => marker.isLocalOrigin);
+  const localXAxisLine = markerLayout.lines.find((line) => line.isLocalXAxis);
+
+  if (originMarker === undefined || localXAxisLine === undefined) {
+    return undefined;
+  }
+
+  const markersByName = new Map(markerLayout.markers.map((marker) => [marker.name, marker]));
+  const xAxisFromMarker = markersByName.get(localXAxisLine.from);
+  const xAxisToMarker = markersByName.get(localXAxisLine.to);
+
+  if (xAxisFromMarker === undefined || xAxisToMarker === undefined) {
+    return undefined;
+  }
+
+  const xAxisDelta = {
+    x: xAxisToMarker.point.x - xAxisFromMarker.point.x,
+    y: xAxisToMarker.point.y - xAxisFromMarker.point.y
+  };
+
+  if (xAxisDelta.x ** 2 + xAxisDelta.y ** 2 === 0) {
+    return undefined;
+  }
+
+  return {
+    origin: originMarker.point,
+    xAxisFrom: xAxisFromMarker.point,
+    xAxisTo: xAxisToMarker.point
+  };
+};
+
+const calculateLocalYAxisAngle = (
+  localYAxisReference: LocalYAxisReference,
+  transform: SimilarityTransform
+): number | undefined => {
+  const layoutRayStart = projectPointToLine(
+    localYAxisReference.origin,
+    localYAxisReference.xAxisFrom,
+    localYAxisReference.xAxisTo
+  );
+
+  if (layoutRayStart === undefined) {
+    return undefined;
+  }
+
+  const imageRayStart = transformPoint(layoutRayStart, transform);
+  const imageRayEnd = transformPoint(localYAxisReference.origin, transform);
+  const rayVector = {
+    x: imageRayEnd.x - imageRayStart.x,
+    y: imageRayEnd.y - imageRayStart.y
+  };
+
+  if (rayVector.x ** 2 + rayVector.y ** 2 === 0) {
+    return undefined;
+  }
+
+  return normalizeDegrees((Math.atan2(rayVector.x, -rayVector.y) * 180) / Math.PI);
+};
+
+const projectPointToLine = (point: Point2d, lineStart: Point2d, lineEnd: Point2d): Point2d | undefined => {
+  const lineDelta = {
+    x: lineEnd.x - lineStart.x,
+    y: lineEnd.y - lineStart.y
+  };
+  const lineLengthSquared = lineDelta.x ** 2 + lineDelta.y ** 2;
+
+  if (lineLengthSquared === 0) {
+    return undefined;
+  }
+
+  const projectionRatio =
+    ((point.x - lineStart.x) * lineDelta.x + (point.y - lineStart.y) * lineDelta.y) / lineLengthSquared;
+
+  return {
+    x: lineStart.x + lineDelta.x * projectionRatio,
+    y: lineStart.y + lineDelta.y * projectionRatio
+  };
+};
+
+const normalizeDegrees = (degrees: number): number => {
+  return ((degrees % 360) + 360) % 360;
+};
+
 const isCandidatePixel = (frame: Buffer, pixelIndex: number, threshold: number, maxColorSpread: number): boolean => {
   const bufferIndex = pixelIndex * 3;
   const red = frame[bufferIndex] ?? 0;
@@ -1658,13 +1873,63 @@ const blendChannel = (background: number, foreground: number, alpha: number): nu
   return Math.round(background * (1 - alpha) + foreground * alpha);
 };
 
-const createCsvHeader = (markerLabels: string[]): string => {
-  const markerColumns = markerLabels.flatMap((markerLabel, markerIndex) => {
-    const markerName = sanitizeCsvColumnName(markerLabel || `marker ${markerIndex + 1}`);
-    return [`${markerName}_x`, `${markerName}_y`];
+type CsvColumnSelection = {
+  labels: string[];
+  trackIndices: number[];
+};
+
+type CsvFormatOptions = {
+  coordinateUnits?: string;
+  includeDiffColumns: boolean;
+  includeLayoutScale: boolean;
+  includeLocalYAxisAngle: boolean;
+};
+
+type CsvRowOptions = {
+  coordinateScale?: number;
+  diffReferenceCoordinates: Array<Point2d | undefined>;
+  includeDiffColumns: boolean;
+  includeLayoutScale: boolean;
+  includeLocalYAxisAngle: boolean;
+  localYAxisAngle?: number;
+};
+
+const createCsvColumnSelection = (
+  markerLabels: string[],
+  selectedMarkerNames: string[] | undefined
+): CsvColumnSelection => {
+  const selectedMarkerNameSet =
+    selectedMarkerNames === undefined ? undefined : new Set(selectedMarkerNames.map(normalizeMarkerName));
+  const labels: string[] = [];
+  const trackIndices: number[] = [];
+
+  markerLabels.forEach((markerLabel, markerIndex) => {
+    if (selectedMarkerNameSet !== undefined && !selectedMarkerNameSet.has(normalizeMarkerName(markerLabel))) {
+      return;
+    }
+
+    labels.push(markerLabel);
+    trackIndices.push(markerIndex);
   });
 
-  return ["timestamp_seconds", "frame_index", ...markerColumns].join(",") + "\n";
+  return { labels, trackIndices };
+};
+
+const createCsvHeader = (markerLabels: string[], options: CsvFormatOptions): string => {
+  const coordinateUnitSuffix = options.coordinateUnits === undefined ? "" : ` (${options.coordinateUnits})`;
+  const markerColumns = markerLabels.flatMap((markerLabel, markerIndex) => {
+    const markerName = sanitizeCsvColumnName(markerLabel || `marker ${markerIndex + 1}`);
+    const positionColumns = [`${markerName}_x${coordinateUnitSuffix}`, `${markerName}_y${coordinateUnitSuffix}`];
+    const diffColumns = options.includeDiffColumns
+      ? [`diff_${markerName}_x${coordinateUnitSuffix}`, `diff_${markerName}_y${coordinateUnitSuffix}`]
+      : [];
+
+    return [...positionColumns, ...diffColumns];
+  });
+  const scaleColumns = options.includeLayoutScale ? ["px_in_mm"] : [];
+  const localYAxisAngleColumns = options.includeLocalYAxisAngle ? ["local_y_axis_angle_degrees"] : [];
+
+  return ["timestamp_seconds", "frame_index", ...markerColumns, ...scaleColumns, ...localYAxisAngleColumns].join(",") + "\n";
 };
 
 const sanitizeCsvColumnName = (value: string): string => {
@@ -1679,18 +1944,49 @@ const writeCsvRow = (
   csvStream: ReturnType<typeof createWriteStream>,
   frameIndex: number,
   fps: number,
-  assignedTracks: Array<Detection | undefined>
+  assignedTracks: Array<Detection | undefined>,
+  trackIndices: number[],
+  options: CsvRowOptions
 ): void => {
   const timestampSeconds = frameIndex / fps;
-  const markerColumns = assignedTracks.flatMap((detection) => {
-    if (detection === undefined) {
-      return ["", ""];
+  const coordinateScale = options.includeLayoutScale ? options.coordinateScale : 1;
+  const markerColumns = trackIndices.flatMap((trackIndex) => {
+    const detection = assignedTracks[trackIndex];
+
+    if (detection === undefined || coordinateScale === undefined) {
+      return options.includeDiffColumns ? ["", "", "", ""] : ["", ""];
     }
 
-    return [detection.x.toFixed(2), detection.y.toFixed(2)];
-  });
+    const coordinates = {
+      x: detection.x * coordinateScale,
+      y: detection.y * coordinateScale
+    };
+    const positionColumns = [coordinates.x.toFixed(2), coordinates.y.toFixed(2)];
 
-  csvStream.write([timestampSeconds.toFixed(6), String(frameIndex), ...markerColumns].join(",") + "\n");
+    if (!options.includeDiffColumns) {
+      return positionColumns;
+    }
+
+    options.diffReferenceCoordinates[trackIndex] ??= coordinates;
+    const referenceCoordinates = options.diffReferenceCoordinates[trackIndex];
+
+    if (referenceCoordinates === undefined) {
+      return [...positionColumns, "", ""];
+    }
+
+    return [
+      ...positionColumns,
+      (coordinates.x - referenceCoordinates.x).toFixed(2),
+      (coordinates.y - referenceCoordinates.y).toFixed(2)
+    ];
+  });
+  const scaleColumns = options.includeLayoutScale ? [options.coordinateScale?.toFixed(6) ?? ""] : [];
+  const localYAxisAngleColumns = options.includeLocalYAxisAngle ? [options.localYAxisAngle?.toFixed(2) ?? ""] : [];
+
+  csvStream.write(
+    [timestampSeconds.toFixed(6), String(frameIndex), ...markerColumns, ...scaleColumns, ...localYAxisAngleColumns].join(",") +
+      "\n"
+  );
 };
 
 const createOutputPaths = async (options: TrackOptions, stopSeconds?: number): Promise<OutputPaths> => {

@@ -81,6 +81,7 @@ export const createDefaultFormState = (settings: SettingsResponse): JobFormState
     trailLineWidth: String(settings.defaults.trailLineWidth),
     trailSeconds: String(settings.defaults.trailSeconds),
     trailMarkers: "",
+    csvExportMarkers: "",
     minArea: String(settings.defaults.minArea),
     maxArea: String(settings.defaults.maxArea),
     mergeDistance: String(settings.defaults.mergeDistance),
@@ -92,6 +93,9 @@ export const createDefaultFormState = (settings: SettingsResponse): JobFormState
     labelMarkers: settings.defaults.labelMarkers,
     cropToRoi: settings.defaults.cropToRoi,
     layoutFitTolerance: String(settings.defaults.layoutFitTolerance),
-    debugOneFrame: settings.defaults.debugOneFrame
+    debugOneFrame: settings.defaults.debugOneFrame,
+    useLayoutUnits: false,
+    trackLocalYAxisAngle: settings.defaults.trackLocalYAxisAngle,
+    includeCsvDiffColumns: settings.defaults.includeCsvDiffColumns
   };
 };

@@ -35,6 +35,8 @@ export const DEFAULT_TRACK_SETTINGS = {
   labelMarkers: false,
   cropToRoi: false,
   debugOneFrame: false,
+  trackLocalYAxisAngle: false,
+  includeCsvDiffColumns: false,
   showProgress: true
 };
 
@@ -122,6 +124,18 @@ export const parseMarkerNameList = (value: string | string[]): string[] => {
   return markerNames;
 };
 
+const parseOptionalMarkerNameList = (value: string | string[] | undefined): string[] | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const markerNames = (Array.isArray(value) ? value : value.split(","))
+    .map((markerName) => markerName.trim())
+    .filter((markerName) => markerName.length > 0);
+
+  return markerNames.length === 0 ? undefined : markerNames;
+};
+
 export const parseRegionOfInterest = (value: string | RegionOfInterest): RegionOfInterest => {
   if (typeof value !== "string") {
     if (
@@ -174,6 +188,7 @@ export type TrackSettingsInput = {
   trailLineWidth?: string | number;
   trailSeconds?: string | number;
   trailMarkers?: string | string[];
+  csvExportMarkers?: string | string[];
   minArea?: string | number;
   maxArea?: string | number;
   mergeDistance?: string | number;
@@ -186,6 +201,9 @@ export type TrackSettingsInput = {
   cropToRoi?: boolean;
   layoutFitTolerance?: string | number;
   debugOneFrame?: boolean;
+  trackLocalYAxisAngle?: boolean;
+  includeCsvDiffColumns?: boolean;
+  useLayoutUnits?: boolean;
   showProgress?: boolean;
 };
 
@@ -225,8 +243,8 @@ export const buildTrackOptions = (settings: TrackSettingsInput): TrackOptions =>
       settings.trailSeconds === undefined
         ? DEFAULT_TRACK_SETTINGS.trailSeconds
         : parsePositiveNumber(settings.trailSeconds),
-    trailMarkerNames:
-      settings.trailMarkers === undefined ? undefined : parseMarkerNameList(settings.trailMarkers),
+    trailMarkerNames: parseOptionalMarkerNameList(settings.trailMarkers),
+    csvExportMarkerNames: parseOptionalMarkerNameList(settings.csvExportMarkers),
     trailColorStart,
     trailColorEnd,
     minArea:
@@ -262,6 +280,9 @@ export const buildTrackOptions = (settings: TrackSettingsInput): TrackOptions =>
         : parsePositiveNumber(settings.layoutFitTolerance),
     regionOfInterest: settings.roi === undefined ? undefined : parseRegionOfInterest(settings.roi),
     debugOneFrame: settings.debugOneFrame ?? DEFAULT_TRACK_SETTINGS.debugOneFrame,
+    trackLocalYAxisAngle: settings.trackLocalYAxisAngle ?? DEFAULT_TRACK_SETTINGS.trackLocalYAxisAngle,
+    includeCsvDiffColumns: settings.includeCsvDiffColumns ?? DEFAULT_TRACK_SETTINGS.includeCsvDiffColumns,
+    useLayoutUnits: settings.useLayoutUnits === true,
     showProgress: settings.showProgress ?? DEFAULT_TRACK_SETTINGS.showProgress
   };
 };

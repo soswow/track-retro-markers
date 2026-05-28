@@ -73,6 +73,8 @@ export type TrackSettingsDefaults = {
   labelMarkers: boolean;
   cropToRoi: boolean;
   debugOneFrame: boolean;
+  trackLocalYAxisAngle: boolean;
+  includeCsvDiffColumns: boolean;
   showProgress: boolean;
 };
 
@@ -95,6 +97,7 @@ export type JobFormState = {
   trailLineWidth: string;
   trailSeconds: string;
   trailMarkers: string;
+  csvExportMarkers: string;
   minArea: string;
   maxArea: string;
   mergeDistance: string;
@@ -107,6 +110,9 @@ export type JobFormState = {
   cropToRoi: boolean;
   layoutFitTolerance: string;
   debugOneFrame: boolean;
+  useLayoutUnits: boolean;
+  trackLocalYAxisAngle: boolean;
+  includeCsvDiffColumns: boolean;
 };
 
 export type PersistedUiSettings = {
